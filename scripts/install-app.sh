@@ -51,6 +51,11 @@ echo "==> 编译 App 图标（assets/brand/MoonRise.iconset → .icns）"
 mkdir -p "$APP/Contents/Resources"
 iconutil -c icns assets/brand/MoonRise.iconset -o "$APP/Contents/Resources/MoonRise.icns"
 
+# macOS 26+ 新格式：若 IconComposer 导出的 .icon 存在则一并装入（系统优先使用，无系统托盘白圈）
+if [ -f assets/brand/MoonRise.icon ]; then
+  cp assets/brand/MoonRise.icon "$APP/Contents/Resources/MoonRise.icon"
+fi
+
 echo "==> 签名（优先级：Developer ID > MoonRiseDev 自签 > ad-hoc）"
 IDENT=$(security find-identity -v -p codesigning 2>/dev/null \
   | grep -E 'Developer ID Application|MoonRiseDev' | head -1 \

@@ -14,7 +14,7 @@
 - 生命周期即进程：App 启动建屏、退出销毁（无确认）并连带停止 Sunshine。无 enabled 配置项。
 - 默认 2560×1600 HiDPI@60；分辨率可配置（菜单预设 + 自定义小窗：W、H、刷新率 30/60/75/120；HiDPI 恒开）。
 - 虚拟屏名 "Moon"，App 名 MoonRise.app（显示名进入身份推导，定后不改）。
-- Sunshine 管理模式：managed 为默认（per-user LaunchAgent com.moonrise.sunshine 托管，launchctl 控制生命周期，退出连带停止；launchd 无父 App → TCC 归属稳定在 sunshine 二进制）；brewServices 为回退；manual 仅提示。
+- Sunshine 管理模式：managed 为默认（MoonRise 以子进程独占托管 Sunshine，退出连带停止，异常退避重启；TCC 按责任进程归属 MoonRise）；brewServices 为回退；manual 仅提示。
 - 开机自启默认关（SMAppService，菜单勾选）。
 - 虚拟屏位置不做程序控制：首次在系统设置手动拖放，macOS 按稳定身份记忆。
 - 单屏 UI，Controller 留多屏余地；仅自用 ad-hoc 签名；Duet 保留但禁用其虚拟屏。
@@ -61,7 +61,7 @@ displayID → 轮询活动列表（25ms/5s/泵 run loop）。
 
 - 配置 ~/.config/moonrise/config.json（Codable，原子写，缺字段回退默认）：display{name,width,height,refreshRate} + sunshine{autoConfigure,configPath,restartPolicy=managed|brewServices|manual}。
 - Sunshine 联动：行级编辑 sunshine.conf 的 output_name 与 stream_audio（其余行逐字节保留，.bak 单份备份）；managed 模式下值变化 → stop+start 应用新配置，值未变 → start 幂等保活；brewServices 模式 → brew services restart；manual 只提示。每次 realize 后自动同步。
-- LaunchAgentSunshineManager：opt 稳定路径写入 LaunchAgent plist（KeepAlive=false + SuccessfulExit=false，兼容 Sunshine 自我 fork；launchd 节流替代自研退避）；首次启动解除 brew services 注册；单实例由 pgrep 外部实例清理 + 看门狗 30s 兜底 kickstart 维持；QT_QPA_PLATFORM=minimal 经 plist EnvironmentVariables 注入（隐藏托盘图标）；stdout/stderr 落 ~/.local/state/moonrise/sunshine-child.log。
+- ChildProcessSunshineManager：opt 稳定路径子进程独占托管；异常退出退避重启（5s→60s 封顶）；Sunshine 自我 fork 孤儿自动接管；首次启动解除 brew services 注册；QT_QPA_PLATFORM=minimal 注入（隐藏托盘图标）；stdout/stderr 落 ~/.local/state/moonrise/sunshine-child.log。
 - 状态/错误一律呈现为菜单状态而非崩溃；CGDisplayRegisterReconfigurationCallback + 30s 看门狗兜底。
 - AppController：启动 → 配置 → 可用性检查（失败→菜单错误状态+弹窗）→ 建屏 → Sunshine 联动 → state.json → 回调+看门狗 → RunLoop；退出 → 销毁虚拟屏 + 停止 Sunshine。
 
@@ -71,7 +71,7 @@ displayID → 轮询活动列表（25ms/5s/泵 run loop）。
 - M1 核心库：✅ 完成（shim/身份/控制器/配置/单测）。
 - M2 菜单栏 App：✅ 完成（状态行、重新开始、分辨率菜单+自定义窗、开机自启、退出、install-app.sh）。
 - M3 Sunshine 自动联动（brewServices 编排）：✅ 完成。
-- M4：✅ 诊断窗口；✅ Sunshine LaunchAgent 托管整合（managed 默认 + 退出连带停止 + launchd 节流 + fork 兼容 + brew 解注册 + TCC 归属稳定）；✅ Moon 端到端验收已通过（配对/画质/键鼠/串流验证）。
+- M4：✅ 诊断窗口；✅ Sunshine 子进程托管整合（managed 默认 + 退出连带停止 + 退避重启 + fork 接管 + brew 解注册 + TCC 归属 MoonRise）；✅ Moon 端到端验收已通过（配对/画质/键鼠/串流验证）。
 
 ## 验证清单（最终出口）
 
@@ -91,7 +91,7 @@ displayID → 轮询活动列表（25ms/5s/泵 run loop）。
 | 异常退出死循环重启 | launchd ThrottleInterval 节流 + 看门狗 30s 兜底 |
 | Moonlight v6 自定义分辨率黑边 | 实测；回退预设 + 同步改比例 |
 | 非整数缩放发糊 | Moon 固定 Default（恰好 2x） |
-| TCC 权限 | LaunchAgent 托管 → 归属稳定在 sunshine 二进制；MoonRise 重建/重装不影响授权 |
+| TCC 权限 | 子进程托管 → 按责任进程归属 MoonRise；MoonRise 重建/重装不影响授权 |
 | Duet 混淆 | 禁用其虚拟屏；诊断警告 |
 | HEVC 无硬解 | 默认 H.264 |
 | host 音频受影响 | tap 非破坏性；Moon 端音量 0 |

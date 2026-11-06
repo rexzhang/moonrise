@@ -9,6 +9,21 @@ bash scripts/install-app.sh   # 签名并安装为 /Applications/MoonRise.app
 bash scripts/make-cert.sh --trust   # 一次性：生成自签代码签名证书（弹框点"始终信任"）
 ```
 
+### App 图标更新
+
+改 logo 后运行：
+
+```bash
+.venv/bin/python scripts/logo_process.py <新logo源图.png>   # 抠图裁剪合成，重出 masters + iconset
+bash scripts/install-app.sh
+```
+
+若要使用 macOS 26+ 的新格式（IconComposer 导出的 .icon，系统直出无系统托盘白圈）：
+1. IconComposer 打开 `assets/brand/logo/moonrise-fg-1044x865.png`（透明双屏前景图层）
+2. 背景设纯色 `#101318`，导出为 `assets/brand/MoonRise.icon`
+3. 重新运行 `bash scripts/install-app.sh`（脚本检测到 .icon 会自动装入 bundle）
+```
+
 ## 模块结构
 
 - Sources/VirtualDisplayObjC：CGVirtualDisplay 私有 API 薄封装（MRC，-fno-objc-arc；运行时类/selector 全量校验，缺失时点名报错，不崩溃）

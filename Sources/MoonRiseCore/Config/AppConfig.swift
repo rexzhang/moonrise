@@ -39,7 +39,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
         public enum RestartPolicy: String, Codable, Sendable {
             /// 由 App 编排：brew services start/stop/restart（回退模式）
             case brewServices
-            /// 由 MoonRise 的 LaunchAgent（com.moonrise.sunshine）托管 Sunshine（默认；退出连带停止）
+            /// 由 MoonRise 以子进程独占托管 Sunshine（默认；退出连带停止）
             case managed
             /// 只写配置，不重启（提示手动重启）
             case manual

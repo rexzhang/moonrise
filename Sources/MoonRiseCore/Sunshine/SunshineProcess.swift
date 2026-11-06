@@ -1,7 +1,7 @@
 import Foundation
 
 /// Sunshine 安装探测与生命周期编排协议。
-/// 实现：LaunchAgentSunshineManager（默认托管）/ BrewServicesSunshineManager（回退），
+/// 实现：ChildProcessSunshineManager（默认托管）/ BrewServicesSunshineManager（回退），
 /// App 层无感切换。
 public protocol SunshineManaging {
     /// 探测安装；nil = 未安装。

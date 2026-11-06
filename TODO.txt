@@ -1,0 +1,12 @@
+Logo 资产与图标:
+    ☐ 提交推送 logo 定稿资产（assets/brand + scripts/logo_process.py + docs 改动）
+    ☐ 可选: IconComposer 导出 MoonRise.icon 装入 bundle（消除 Quick Look 白圈，系统级）@next
+    moonrise-icon-master.png @note 1064×1064 定稿 master（透明背景，左右各 10px）
+    moonrise-icon-{1024,512,256,128}.png @note 品牌导出尺寸（README 头图用 256）
+    moonrise-fg-1044x865.png @note IconComposer 前景图层（透明双屏）
+    moonrise-logo-source-clean.png @note 抠图版全画布记录
+    MoonRise.iconset/ @note icns 源（深墨合成版十尺寸，install-app.sh 编译 .icns）
+    重出命令 @note .venv/bin/python scripts/logo_process.py <新源图>
+
+收尾:
+    ☐ 提交推送本轮清理与文档改动
