@@ -10,12 +10,15 @@ public struct AppConfig: Codable, Equatable, Sendable {
         public var width: Int
         public var height: Int
         public var refreshRate: Int
+        /// 虚拟屏建立/销毁后自动恢复 host 显示器的缩放基线（默认开启）
+        public var keepHostScaling: Bool
 
-        public init(name: String = "Moon", width: Int = 2560, height: Int = 1600, refreshRate: Int = 60) {
+        public init(name: String = "Moon", width: Int = 2560, height: Int = 1600, refreshRate: Int = 60, keepHostScaling: Bool = true) {
             self.name = name
             self.width = width
             self.height = height
             self.refreshRate = refreshRate
+            self.keepHostScaling = keepHostScaling
         }
 
         public var spec: DisplaySpec {
@@ -28,6 +31,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
             width = try c.decodeIfPresent(Int.self, forKey: .width) ?? 2560
             height = try c.decodeIfPresent(Int.self, forKey: .height) ?? 1600
             refreshRate = try c.decodeIfPresent(Int.self, forKey: .refreshRate) ?? 60
+            keepHostScaling = try c.decodeIfPresent(Bool.self, forKey: .keepHostScaling) ?? true
         }
     }
 

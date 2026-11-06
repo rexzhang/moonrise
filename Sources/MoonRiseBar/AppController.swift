@@ -67,7 +67,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     DispatchQueue.main.async { self.showPermissionPanel() }
                     Log.info("屏幕捕获/输入控制权限缺失：已自动打开权限引导面板")
                 }
+                if self.config.display.keepHostScaling {
+                    HostDisplayModeKeeper.snapshot()   // Moon 建屏前记录 host 显示模式基线
+                }
                 try self.reconcile()
+                if self.config.display.keepHostScaling {
+                    HostDisplayModeKeeper.restoreAll() // 拓扑变化后恢复 host 缩放
+                }
                 self.startWatchdog()
             } catch {
                 self.degrade(error: error)
@@ -79,6 +85,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 生命周期即进程：退出即销毁（~0.4s，可接受）。
         // 注：进程终止期主 run loop 不再运转，CG 回调不会送达，无需反注册。
         try? virtualController?.teardown()
+        if config.display.keepHostScaling {
+            HostDisplayModeKeeper.restoreAll()   // Moon 销毁后恢复 host 缩放
+        }
         try? sunshineManager.stop()
         reconfigUserData?.release()
         reconfigUserData = nil
@@ -204,6 +213,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resolutionMenu.addItem(customItem)
         resolutionRoot.submenu = resolutionMenu
         menu.addItem(resolutionRoot)
+
+        let keepScalingItem = NSMenuItem(title: "保持显示器缩放", action: #selector(toggleKeepHostScaling), keyEquivalent: "")
+        keepScalingItem.target = self
+        keepScalingItem.isEnabled = !busy
+        keepScalingItem.state = config.display.keepHostScaling ? .on : .off
+        menu.addItem(keepScalingItem)
 
         let sunshineRoot = NSMenuItem(title: "Sunshine", action: nil, keyEquivalent: "")
         let sunshineMenu = NSMenu()
@@ -416,6 +431,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             sunshineStatus: sunshineStatus,
             manager: sunshineManager,
             sunshineConfigPath: config.sunshine.configPath))
+    }
+
+    @objc private func toggleKeepHostScaling() {
+        config.display.keepHostScaling.toggle()
+        try? config.save()
+        refreshMenu()
     }
 
     @objc private func toggleLoginItem() {
