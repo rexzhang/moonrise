@@ -17,19 +17,19 @@ let package = Package(
             ]
         ),
         .target(
-            name: "MoonriseCore",
+            name: "MoonRiseCore",
             dependencies: ["VirtualDisplayObjC"],
-            path: "Sources/MoonriseCore"
+            path: "Sources/MoonRiseCore"
         ),
         .executableTarget(
-            name: "MoonriseBar",
-            dependencies: ["MoonriseCore"],
-            path: "Sources/MoonriseBar"
+            name: "MoonRiseBar",
+            dependencies: ["MoonRiseCore"],
+            path: "Sources/MoonRiseBar"
         ),
         .testTarget(
-            name: "MoonriseCoreTests",
-            dependencies: ["MoonriseCore"],
-            path: "Tests/MoonriseCoreTests"
+            name: "MoonRiseCoreTests",
+            dependencies: ["MoonRiseCore"],
+            path: "Tests/MoonRiseCoreTests"
         )
     ]
 )

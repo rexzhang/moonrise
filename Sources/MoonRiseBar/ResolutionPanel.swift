@@ -1,7 +1,7 @@
 // ResolutionPanel.swift — 自定义分辨率小窗：宽、高、刷新率下拉。
 
 import AppKit
-import MoonriseCore
+import MoonRiseCore
 
 final class ResolutionPanelWindow: NSWindow, NSWindowDelegate {
     private let widthField = NSTextField()

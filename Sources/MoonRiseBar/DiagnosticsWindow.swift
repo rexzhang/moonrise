@@ -1,7 +1,7 @@
 // DiagnosticsWindow.swift — 诊断窗口：一键检查整条链路的各项前置条件。
 
 import AppKit
-import MoonriseCore
+import MoonRiseCore
 import VirtualDisplayObjC
 
 final class DiagnosticsWindow: NSWindow, NSWindowDelegate {
@@ -92,7 +92,14 @@ final class DiagnosticsWindow: NSWindow, NSWindowDelegate {
             results.append(("⚠️ sunshine.conf 不存在", confPath + "（先启动一次 Sunshine）"))
         }
 
-        // 5. Sunshine 捕获权限（从最近日志推断，无法直接读 TCC）
+        // 5a. MoonRise 屏幕捕获权限（本进程 preflight，权威）
+        let granted = CapturePermission.granted
+        results.append((
+            granted ? "✅ MoonRise 屏幕捕获权限" : "❌ MoonRise 屏幕捕获权限",
+            granted ? "已授予" : "未授予——启动时的系统弹窗允许，或系统设置打开 MoonRise 开关"
+        ))
+
+        // 5b. Sunshine 捕获权限（从最近日志推断，无法直接读 TCC）
         let logResult = checkSunshinePermission(logPath: Paths.expandTilde("~/.config/sunshine/sunshine.log"))
         results.append(logResult)
 
@@ -101,8 +108,8 @@ final class DiagnosticsWindow: NSWindow, NSWindowDelegate {
             let spec = display.spec
             results.append((
                 "ℹ️ Retina 指引",
-                "系统设置 → 显示器 选中 Sunshine Ext，分辨率选 \(spec.logicalWidth)×\(spec.logicalHeight)"
-                    + "（“看起来像”）；ext 端 Moonlight 设 \(spec.width)×\(spec.height)@\(spec.refreshRate) H.264 全屏"
+                "系统设置 → 显示器 选中 \(spec.name)，分辨率选 \(spec.logicalWidth)×\(spec.logicalHeight)"
+                    + "（“看起来像”）；Moon 端 Moonlight 设 \(spec.width)×\(spec.height)@\(spec.refreshRate) H.264 全屏"
             ))
         }
 
@@ -121,7 +128,7 @@ final class DiagnosticsWindow: NSWindow, NSWindowDelegate {
     static func externalDisplaySummary(liveIDs: [CGDirectDisplayID]) -> [String] {
         var out: [String] = []
         for id in liveIDs {
-            if CGDisplayVendorNumber(id) == 0x7365 { continue }
+            if CGDisplayVendorNumber(id) == DisplayIdentity.vendorID { continue }
             if CGDisplayIsBuiltin(id) != 0 { continue }
             let bounds = CGDisplayBounds(id)
             out.append("id=\(id) vendor=0x\(String(CGDisplayVendorNumber(id), radix: 16)) \(Int(bounds.width))x\(Int(bounds.height))")
@@ -129,19 +136,27 @@ final class DiagnosticsWindow: NSWindow, NSWindowDelegate {
         return out
     }
 
+    /// 最近一次启动的编码器探测是否通过（权限已生效的事实检验）
+    static func sunshineProbeGranted(logPath: String) -> Bool {
+        guard let content = try? String(contentsOfFile: logPath, encoding: .utf8) else {
+            return false
+        }
+        let latest = content.components(separatedBy: "Sunshine version").last ?? ""
+        return latest.contains("Found H.264 encoder")
+    }
+
     /// 从 sunshine.log 判断最近一次启动是否有捕获权限错误
     static func checkSunshinePermission(logPath: String) -> (String, String) {
         guard let content = try? String(contentsOfFile: logPath, encoding: .utf8) else {
             return ("⚠️ 无法读取 Sunshine 日志", logPath)
         }
-        // 只看最后一个 "Sunshine version" 之后的段落（最近一次启动）
-        let segments = content.components(separatedBy: "Sunshine version")
-        let latest = segments.last ?? ""
-        if latest.contains("No screen capture permission") {
-            return ("❌ Sunshine 无屏幕捕获权限", "系统设置 → 隐私与安全性 → 给 sunshine 授权后，菜单 → Sunshine → 重启 Sunshine")
-        }
-        if latest.contains("Found H.264 encoder") {
+        if sunshineProbeGranted(logPath: logPath) {
             return ("✅ Sunshine 捕获与编码", "屏幕捕获权限正常，VideoToolbox 硬件编码器就绪")
+        }
+        // 只看最后一次启动段：未出现编码器就绪且出现权限错误 → 权限缺失
+        let latest = content.components(separatedBy: "Sunshine version").last ?? ""
+        if latest.contains("No screen capture permission") {
+            return ("❌ Sunshine 无屏幕捕获权限", "菜单 → 权限引导…，允许 MoonRise 后点「重启 Sunshine」")
         }
         return ("⚠️ 未在日志确认编码器状态", "如串流异常请看 \(logPath)")
     }

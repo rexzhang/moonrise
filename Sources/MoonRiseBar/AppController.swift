@@ -3,7 +3,7 @@
 import AppKit
 import CoreGraphics
 import ServiceManagement
-import MoonriseCore
+import MoonRiseCore
 
 final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 状态
@@ -25,7 +25,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var busy = false
     private var watchdog: Timer?
     private var resolutionPanel: ResolutionPanelWindow?
+    private var lastCapturePermission: Bool?
+    private var restartedSunshineAfterGrant = false
     private var diagnosticsWindow: DiagnosticsWindow?
+    private var permissionPanel: PermissionPanel?
 
     private var currentSpec: DisplaySpec {
         (try? config.display.spec.validated()) ?? .default
@@ -34,8 +37,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 生命周期
 
     override init() {
-        let brewPath = BrewServicesSunshineManager.detectBrew() ?? "/opt/homebrew/bin/brew"
-        self.sunshineManager = BrewServicesSunshineManager(brewPath: brewPath)
+        if let binPath = ChildProcessSunshineManager.detectBinary() {
+            sunshineManager = ChildProcessSunshineManager(
+                binPath: binPath,
+                confPath: Paths.expandTilde(config.sunshine.configPath),
+                logURL: Paths.stateDirectory.appendingPathComponent("sunshine-child.log"),
+                hideTrayIcon: config.sunshine.hideTrayIcon)
+        } else {
+            let brewPath = BrewServicesSunshineManager.detectBrew() ?? "/opt/homebrew/bin/brew"
+            sunshineManager = BrewServicesSunshineManager(brewPath: brewPath)
+        }
         super.init()
     }
 
@@ -50,6 +61,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let controller = try VirtualDisplayController()
                 self.virtualController = controller
                 self.registerReconfigurationCallback()
+                // 权限引导：屏幕捕获或输入控制缺失时自动打开面板
+                self.lastCapturePermission = CapturePermission.granted
+                if !CapturePermission.granted || !CapturePermission.inputControlGranted {
+                    DispatchQueue.main.async { self.showPermissionPanel() }
+                    Log.info("屏幕捕获/输入控制权限缺失：已自动打开权限引导面板")
+                }
                 try self.reconcile()
                 self.startWatchdog()
             } catch {
@@ -62,6 +79,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 生命周期即进程：退出即销毁（~0.4s，可接受）。
         // 注：进程终止期主 run loop 不再运转，CG 回调不会送达，无需反注册。
         try? virtualController?.teardown()
+        try? sunshineManager.stop()
         reconfigUserData?.release()
         reconfigUserData = nil
     }
@@ -72,7 +90,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func reconcile() throws {
         guard let virtualController else {
             throw NSError(
-                domain: "com.moonrise.app",
+                domain: "com.rexzhang.moonrise",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "虚拟屏控制器不可用"])
         }
@@ -94,7 +112,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private static func sunshineStatusText(_ outcome: SunshineSync.Outcome) -> String {
         switch outcome {
-        case .synced, .unchanged:
+        case .synced, .started, .unchanged:
             return "已同步"
         case .notInstalled:
             return "未安装"
@@ -189,6 +207,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let sunshineRoot = NSMenuItem(title: "Sunshine", action: nil, keyEquivalent: "")
         let sunshineMenu = NSMenu()
+        let runStateItem = NSMenuItem(title: "状态：\(sunshineManager.statusLine())", action: nil, keyEquivalent: "")
+        runStateItem.isEnabled = false
+        sunshineMenu.addItem(runStateItem)
+        let audioItem = NSMenuItem(title: "禁用音频串流", action: #selector(toggleAudioStreaming), keyEquivalent: "")
+        audioItem.target = self
+        audioItem.isEnabled = !busy
+        audioItem.state = config.sunshine.disableAudioStreaming ? .on : .off
+        sunshineMenu.addItem(audioItem)
         let syncItem = NSMenuItem(title: "重新同步 output_name", action: #selector(syncSunshine), keyEquivalent: "")
         syncItem.target = self
         syncItem.isEnabled = actionsEnabled
@@ -203,6 +229,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sunshineMenu.addItem(webUIItem)
         sunshineRoot.submenu = sunshineMenu
         menu.addItem(sunshineRoot)
+
+        let permissionItem = NSMenuItem(title: "权限引导…", action: #selector(showPermissionPanel), keyEquivalent: "")
+        permissionItem.target = self
+        permissionItem.isEnabled = !busy
+        menu.addItem(permissionItem)
 
         let diagnosticsItem = NSMenuItem(title: "诊断…", action: #selector(showDiagnostics), keyEquivalent: "")
         diagnosticsItem.target = self
@@ -219,7 +250,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "退出 Moonrise", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出 MoonRise", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         quitItem.isEnabled = !busy
         menu.addItem(quitItem)
@@ -228,10 +259,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     static let presets: [DisplaySpec] = [
-        DisplaySpec(name: "Sunshine Ext", width: 2560, height: 1600, refreshRate: 60),
-        DisplaySpec(name: "Sunshine Ext", width: 1920, height: 1200, refreshRate: 60),
-        DisplaySpec(name: "Sunshine Ext", width: 2560, height: 1440, refreshRate: 60),
-        DisplaySpec(name: "Sunshine Ext", width: 1920, height: 1080, refreshRate: 60)
+        DisplaySpec(name: "Moon", width: 2560, height: 1600, refreshRate: 60),
+        DisplaySpec(name: "Moon", width: 1920, height: 1200, refreshRate: 60),
+        DisplaySpec(name: "Moon", width: 2560, height: 1440, refreshRate: 60),
+        DisplaySpec(name: "Moon", width: 1920, height: 1080, refreshRate: 60)
     ]
 
     private func statusMenuItem() -> NSMenuItem {
@@ -263,7 +294,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .degraded:
             symbolName = "exclamationmark.triangle"
         }
-        statusItem.button?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Moonrise")
+        statusItem.button?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "MoonRise")
     }
 
     // MARK: - 菜单动作
@@ -320,6 +351,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    @objc private func toggleAudioStreaming() {
+        config.sunshine.disableAudioStreaming.toggle()
+        try? config.save()
+        syncSunshine()  // 应用到 sunshine.conf；值变化会自动重启 Sunshine
+    }
+
     @objc private func syncSunshine() {
         runBusy {
             guard let display = self.realized else { return }
@@ -353,6 +390,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openWebUI() {
         NSWorkspace.shared.open(URL(string: "https://localhost:47990")!)
+    }
+
+    @objc private func showPermissionPanel() {
+        if permissionPanel == nil {
+            permissionPanel = PermissionPanel()
+        }
+        permissionPanel?.present(context: PermissionPanel.Context(
+            manager: sunshineManager,
+            sunshineLogPath: Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path,
+            restartSunshine: { [weak self] in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    try? self?.sunshineManager.restart()
+                }
+            }))
     }
 
     @objc private func showDiagnostics() {
@@ -419,10 +470,30 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func startWatchdog() {
         watchdog = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            guard let self, !self.busy, let display = self.realized else { return }
-            if self.liveIDs().contains(display.displayID) == false {
+            guard let self, !self.busy else { return }
+            if let display = self.realized,
+               self.liveIDs().contains(display.displayID) == false {
                 Log.info("看门狗：虚拟屏消失，重建")
                 self.displayLostExternally()
+            }
+            // managed 模式：Sunshine 孤儿/异常退出后兜底拉起
+            if self.config.sunshine.restartPolicy == .managed,
+               self.sunshineManager.statusLine() == "未运行" {
+                Log.info("看门狗：Sunshine 未运行，重新拉起")
+                self.runBusy {
+                    try? self.sunshineManager.start()
+                }
+            }
+            // 屏幕捕获授权完成 → 重启一次 Sunshine（启动期编码器探测需要权限）
+            let granted = CapturePermission.granted
+            if !self.restartedSunshineAfterGrant,
+               self.lastCapturePermission == false, granted {
+                self.restartedSunshineAfterGrant = true
+                self.lastCapturePermission = granted
+                Log.info("屏幕捕获权限已授予，重启 Sunshine 重跑编码器探测")
+                self.runBusy {
+                    try? self.sunshineManager.restart()
+                }
             }
         }
     }

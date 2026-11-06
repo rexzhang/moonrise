@@ -4,10 +4,18 @@ import Foundation
 public enum SunshineSync {
     public enum Outcome: Equatable {
         case synced          // 已同步（含本次写盘并重启成功）
+        case started         // managed：配置未变，确保了 Sunshine 在跑
         case unchanged       // 值本来就对，未动
         case notInstalled    // 未安装（提示安装指引）
         case missingConfig   // conf 不存在（提示先跑一次 Sunshine）
         case failed(String)  // 其它失败（原因）
+    }
+
+    /// 目标键值：output_name（虚拟屏）+ stream_audio（音频串流开关）
+    static func targetValues(outputName: UInt32, config: AppConfig) -> [String: String] {
+        var values = ["output_name": String(outputName)]
+        values["stream_audio"] = config.sunshine.disableAudioStreaming ? "disabled" : "enabled"
+        return values
     }
 
     /// 幂等联动入口。阻塞（可能重启服务 ~2s）：在后台队列调用。
@@ -17,10 +25,15 @@ public enum SunshineSync {
         guard manager.detect() != nil else { return .notInstalled }
 
         do {
-            switch try ConfFile.syncOutputName(
+            switch try ConfFile.syncValues(
                 configPath: config.sunshine.configPath,
-                outputName: String(outputName)) {
+                values: targetValues(outputName: outputName, config: config)) {
             case .unchanged:
+                // managed 语义下"配置正确"也要确保 Sunshine 在跑（start 幂等）
+                if case .managed = config.sunshine.restartPolicy {
+                    try manager.start()
+                    return .started
+                }
                 return .unchanged
             case .changed:
                 try applyRestart(config: config, manager: manager)
@@ -37,9 +50,8 @@ public enum SunshineSync {
         switch config.sunshine.restartPolicy {
         case .brewServices:
             try manager.restart()
-        case .childProcess:
-            // M4 引入；此前配置不应出现
-            throw SunshineManagerError.commandFailed("childProcess 模式尚未启用")
+        case .managed:
+            try manager.restart()
         case .manual:
             Log.info("restartPolicy=manual：请手动重启 Sunshine 使 output_name 生效")
         }

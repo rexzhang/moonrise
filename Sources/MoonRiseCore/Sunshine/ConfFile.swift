@@ -59,20 +59,28 @@ public enum ConfFile {
         return (.changed, output)
     }
 
-    /// 文件级联动：读文件 → 更新 output_name → 有变化才写盘（先备份 .bak）。
+    /// 文件级联动：读文件 → 逐键更新 → 任一变化才写盘（先备份 .bak）。
     /// 文件不存在视为缺失（调用方提示安装指引，不整体代建）。
-    public static func syncOutputName(configPath: String, outputName: String) throws -> EditResult {
+    public static func syncValues(configPath: String, values: [String: String]) throws -> EditResult {
         let url = URL(fileURLWithPath: Paths.expandTilde(configPath))
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw ConfFileError.configMissing(url.path)
         }
         let text = try String(contentsOf: url, encoding: .utf8)
-        let (result, newText) = setValue(in: text, key: "output_name", value: outputName)
-        guard result == .changed else { return .unchanged }
+        var output = text
+        var changed = false
+        for (key, value) in values {
+            let (result, newText) = setValue(in: output, key: key, value: value)
+            if result == .changed {
+                output = newText
+                changed = true
+            }
+        }
+        guard changed else { return .unchanged }
 
         let backupURL = url.deletingLastPathComponent().appendingPathComponent("sunshine.conf.bak")
         try? FileManager.default.copyItem(at: url, to: backupURL)
-        try newText.write(to: url, atomically: true, encoding: .utf8)
+        try output.write(to: url, atomically: true, encoding: .utf8)
         return .changed
     }
 }

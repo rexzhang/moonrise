@@ -1,14 +1,16 @@
 import Foundation
 
-/// Sunshine 安装探测与生命周期编排（M3：brew services 模式）。
-/// M4 将引入 childProcess 实现（App 作为父进程、退出连带停止），
-/// 两者共用此协议，App 层无感切换。
+/// Sunshine 安装探测与生命周期编排协议。
+/// 实现：LaunchAgentSunshineManager（默认托管）/ BrewServicesSunshineManager（回退），
+/// App 层无感切换。
 public protocol SunshineManaging {
     /// 探测安装；nil = 未安装。
     func detect() -> SunshineInstallInfo?
     func start() throws
     func stop() throws
     func restart() throws
+    /// 供菜单展示的单行运行状态。
+    func statusLine() -> String
 }
 
 public struct SunshineInstallInfo {
@@ -54,6 +56,10 @@ public struct BrewServicesSunshineManager: SunshineManaging {
 
     public func restart() throws {
         try runServiceCommand("restart")
+    }
+
+    public func statusLine() -> String {
+        "brew services 托管"
     }
 
     private func runServiceCommand(_ verb: String) throws {

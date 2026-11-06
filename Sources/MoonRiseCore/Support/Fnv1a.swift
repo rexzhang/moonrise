@@ -19,8 +19,8 @@ public struct DisplayIdentity: Equatable, Sendable {
     public let productID: UInt32
     public let serialNumber: UInt32
 
-    public static let vendorID: UInt32 = 0x7365      // "se"
-    public static let productID: UInt32 = 0x6578     // "ex"
+    public static let vendorID: UInt32 = 0x6D6F      // "mo"
+    public static let productID: UInt32 = 0x6F6E     // "on"（与 vendor 连读 = "moon"）
     /// 记忆模式不符时的重试盐（参考实现同款）
     public static let retrySalt: UInt32 = 0x9E37_79B9
 

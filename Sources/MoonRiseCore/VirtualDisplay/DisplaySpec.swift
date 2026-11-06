@@ -14,7 +14,7 @@ public struct DisplaySpec: Equatable, Codable, Sendable {
         self.refreshRate = refreshRate
     }
 
-    public static let `default` = DisplaySpec(name: "Sunshine Ext", width: 2560, height: 1600, refreshRate: 60)
+    public static let `default` = DisplaySpec(name: "Moon", width: 2560, height: 1600, refreshRate: 60)
 
     public static let minDimension = 64
     public static let maxDimension = 16_384

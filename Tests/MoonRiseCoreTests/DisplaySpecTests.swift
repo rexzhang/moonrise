@@ -1,5 +1,5 @@
 import XCTest
-@testable import MoonriseCore
+@testable import MoonRiseCore
 
 final class DisplaySpecTests: XCTestCase {
     func testDefaultSpecIsValid() throws {
@@ -15,7 +15,7 @@ final class DisplaySpecTests: XCTestCase {
     }
 
     func testModeSpecsContainLogicalMode() throws {
-        let spec = DisplaySpec(name: "Sunshine Ext", width: 2560, height: 1600, refreshRate: 60)
+        let spec = DisplaySpec(name: "Moon", width: 2560, height: 1600, refreshRate: 60)
         let modes = spec.modeSpecs
         XCTAssertEqual(modes.count, 2)
         XCTAssertEqual(modes[0][0].intValue, 2560)

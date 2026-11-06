@@ -1,5 +1,5 @@
 import XCTest
-@testable import MoonriseCore
+@testable import MoonRiseCore
 
 final class ConfFileTests: XCTestCase {
     func testAppendWhenKeyMissing() {
@@ -48,5 +48,33 @@ final class ConfFileTests: XCTestCase {
         XCTAssertEqual(ConfFile.readValue(in: text, key: "port"), "1")
         XCTAssertNil(ConfFile.readValue(in: text, key: "missing"))
         XCTAssertNil(ConfFile.readValue(in: "# output_name = 3\n", key: "output_name"))
+    }
+}
+
+final class SyncValuesTests: XCTestCase {
+    func testMultiKeySyncIdempotentAndPartialChange() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let conf = dir.appendingPathComponent("sunshine.conf")
+        try "locale = zh\n".write(to: conf, atomically: true, encoding: .utf8)
+
+        // 首次：追加两个键
+        XCTAssertEqual(try ConfFile.syncValues(configPath: conf.path, values: ["output_name": "43", "stream_audio": "disabled"]), .changed)
+        let text1 = try String(contentsOf: conf, encoding: .utf8)
+        XCTAssertTrue(text1.contains("output_name = 43"))
+        XCTAssertTrue(text1.contains("stream_audio = disabled"))
+        XCTAssertTrue(text1.contains("locale = zh"))
+
+        // 幂等：相同值不写盘
+        XCTAssertEqual(try ConfFile.syncValues(configPath: conf.path, values: ["output_name": "43", "stream_audio": "disabled"]), .unchanged)
+
+        // 单键变化：仅改该键
+        XCTAssertEqual(try ConfFile.syncValues(configPath: conf.path, values: ["output_name": "43", "stream_audio": "enabled"]), .changed)
+        XCTAssertEqual(ConfFile.readValue(in: try String(contentsOf: conf, encoding: .utf8), key: "stream_audio"), "enabled")
+        XCTAssertEqual(ConfFile.readValue(in: try String(contentsOf: conf, encoding: .utf8), key: "output_name"), "43")
+
+        // 配置缺失报错
+        let missing = dir.appendingPathComponent("nope.conf")
+        XCTAssertThrowsError(try ConfFile.syncValues(configPath: missing.path, values: ["k": "v"]))
     }
 }
