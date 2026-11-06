@@ -287,14 +287,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateIcon() {
-        let symbolName: String
+        let image: NSImage
         switch phase {
         case .starting, .running:
-            symbolName = "display"
+            image = BrandGlyph.normal()
         case .degraded:
-            symbolName = "exclamationmark.triangle"
+            image = BrandGlyph.problem()
         }
-        statusItem.button?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "MoonRise")
+        statusItem.button?.image = image
     }
 
     // MARK: - 菜单动作
