@@ -475,7 +475,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 // 拓扑落定即恢复 host 缩放（低 DPI 闪烁窗口 ~0.5s → ~50ms）
                 if flags.contains(.addFlag) || flags.contains(.enabledFlag)
-                    || flags.contains(.removedFlag) || flags.contains(.setMainFlag)
+                    || flags.contains(.removeFlag) || flags.contains(.setMainFlag)
                     || flags.contains(.movedFlag) {
                     controller.scheduleHostScalingRestore()
                 }
