@@ -470,7 +470,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             { _, flags, userInfo in
                 guard let userInfo else { return }
                 let controller = Unmanaged<AppController>.fromOpaque(userInfo).takeUnretainedValue()
-                if flags.contains(.remove) || flags.contains(.disabledFlag) {
+                if flags.contains(.removeFlag) || flags.contains(.disabledFlag) {
                     controller.displayLostExternally()
                 }
                 // 拓扑落定即恢复 host 缩放（低 DPI 闪烁窗口 ~0.5s → ~50ms）
