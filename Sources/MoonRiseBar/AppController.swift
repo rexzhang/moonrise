@@ -470,11 +470,30 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             { _, flags, userInfo in
                 guard let userInfo else { return }
                 let controller = Unmanaged<AppController>.fromOpaque(userInfo).takeUnretainedValue()
-                if flags.contains(.removeFlag) || flags.contains(.disabledFlag) {
+                if flags.contains(.remove) || flags.contains(.disabledFlag) {
                     controller.displayLostExternally()
+                }
+                // 拓扑落定即恢复 host 缩放（低 DPI 闪烁窗口 ~0.5s → ~50ms）
+                if flags.contains(.addFlag) || flags.contains(.enabledFlag)
+                    || flags.contains(.removedFlag) || flags.contains(.setMainFlag)
+                    || flags.contains(.movedFlag) {
+                    controller.scheduleHostScalingRestore()
                 }
             },
             userData.toOpaque())
+    }
+
+    private var hostScalingRestorePending = false
+
+    /// 拓扑落定后调度一次 host 缩放恢复（去抖合并；keepHostScaling 门控）
+    fileprivate func scheduleHostScalingRestore() {
+        guard config.display.keepHostScaling, !hostScalingRestorePending else { return }
+        hostScalingRestorePending = true
+        DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self, self.hostScalingRestorePending else { return }
+            HostDisplayModeKeeper.restoreAll()
+            self.hostScalingRestorePending = false
+        }
     }
 
     /// 我们持有屏被外部移除（理论不应发生；兜底）→ 主线程重建
