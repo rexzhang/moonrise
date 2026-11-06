@@ -109,7 +109,7 @@ final class DiagnosticsWindow: NSWindow, NSWindowDelegate {
             results.append((
                 "ℹ️ Retina 指引",
                 "系统设置 → 显示器 选中 \(spec.name)，分辨率选 \(spec.logicalWidth)×\(spec.logicalHeight)"
-                    + "（“看起来像”）；Moon 端 Moonlight 设 \(spec.width)×\(spec.height)@\(spec.refreshRate) H.264 全屏"
+                    + "（“看起来像”），并同步在排列视图调整位置；Moon 端 Moonlight 设 \(spec.width)×\(spec.height)@\(spec.refreshRate) H.264 全屏"
             ))
         }
 

@@ -71,7 +71,7 @@ displayID → 轮询活动列表（25ms/5s/泵 run loop）。
 - M1 核心库：✅ 完成（shim/身份/控制器/配置/单测）。
 - M2 菜单栏 App：✅ 完成（状态行、重新开始、分辨率菜单+自定义窗、开机自启、退出、install-app.sh）。
 - M3 Sunshine 自动联动（brewServices 编排）：✅ 完成。
-- M4：✅ 诊断窗口；✅ Sunshine LaunchAgent 托管整合（managed 默认 + 退出连带停止 + launchd 节流 + fork 兼容 + brew 解注册 + TCC 归属稳定）；⏳ Moon 端到端验收（配对/画质/键鼠/30 分钟稳定性/黑边回退实测）。
+- M4：✅ 诊断窗口；✅ Sunshine LaunchAgent 托管整合（managed 默认 + 退出连带停止 + launchd 节流 + fork 兼容 + brew 解注册 + TCC 归属稳定）；✅ Moon 端到端验收已通过（配对/画质/键鼠/串流验证）。
 
 ## 验证清单（最终出口）
 
