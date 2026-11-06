@@ -1,5 +1,13 @@
 # MoonRise
 
+<p align="center"><img src="assets/brand/logo/moonrise-icon-256.png" width="128" alt="MoonRise"></p>
+
+[![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-1B2A4A)](https://github.com/rexzhang/moonrise)
+[![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://github.com/rexzhang/moonrise)
+[![License](https://img.shields.io/badge/license-MPL--2.0-2E7D32)](https://github.com/rexzhang/moonrise)
+
+仓库：https://github.com/rexzhang/moonrise
+
 把另一台 Mac（Moon）变成本机（host）的扩展屏，充分利用 Moon 的 Retina 面板（1:1 像素映射）。
 
 MoonRise 在 host 上创建一块 HiDPI 虚拟屏幕（默认 2560×1600@60，可改分辨率），自动联动官方 Sunshine 捕获串流；Moon 端 Moonlight 全屏显示，文字与原生同样锐利。Sunshine 由本 App 以子进程独占托管（退出连带停止），权限引导面板自动化完成授权。
@@ -12,7 +20,7 @@ MoonRise 在 host 上创建一块 HiDPI 虚拟屏幕（默认 2560×1600@60，�
 # 1. 安装 Sunshine（一次性）
 brew tap lizardbyte/homebrew
 brew install lizardbyte/homebrew/sunshine
-brew pin sunshine
+# brew pin sunshine   # 可选：锁定版本；不 pin 也可，升级后重启 Sunshine 自动跟随新版
 
 # 2. 生成自签签名证书（一次性，弹框点"始终信任"）
 bash scripts/make-cert.sh --trust

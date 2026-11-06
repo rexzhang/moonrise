@@ -21,6 +21,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <dict>
     <key>CFBundleName</key>
     <string>MoonRise</string>
+    <key>CFBundleIconFile</key>
+    <string>MoonRise</string>
     <key>CFBundleDisplayName</key>
     <string>MoonRise</string>
     <key>CFBundleIdentifier</key>
@@ -44,6 +46,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+echo "==> 编译 App 图标（assets/brand/MoonRise.iconset → .icns）"
+mkdir -p "$APP/Contents/Resources"
+iconutil -c icns assets/brand/MoonRise.iconset -o "$APP/Contents/Resources/MoonRise.icns"
 
 echo "==> 签名（优先级：Developer ID > MoonRiseDev 自签 > ad-hoc）"
 IDENT=$(security find-identity -v -p codesigning 2>/dev/null \
