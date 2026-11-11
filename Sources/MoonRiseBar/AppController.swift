@@ -255,13 +255,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.target = self
             item.representedObject = summary.slotID.uuidString
             item.isEnabled = !busy
-            // 状态图标：串流中 = 绿实心播放圈；空闲 = 灰圈；未启用 = 灰虚线圈；离线 = 橙警示圈
+            // 状态图标（圆点体系）：串流中 = 绿实心圆；空闲 = 绿空心圈；未启用 = 灰空心圈；离线 = 橙实心圆
             let icon: (symbol: String, color: NSColor)
             switch summary.state {
-            case .streaming: icon = ("play.circle.fill", .systemGreen)
-            case .idle: icon = ("circle", .secondaryLabelColor)
-            case .disabled: icon = ("circle.dashed", .secondaryLabelColor)
-            case .offline: icon = ("exclamationmark.circle.fill", .systemOrange)
+            case .streaming: icon = ("circle.fill", .systemGreen)
+            case .idle: icon = ("circle", .systemGreen)
+            case .disabled: icon = ("circle", .secondaryLabelColor)
+            case .offline: icon = ("circle.fill", .systemOrange)
             }
             if let symbol = NSImage(systemSymbolName: icon.symbol,
                                     accessibilityDescription: summary.state.label) {

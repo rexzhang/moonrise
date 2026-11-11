@@ -167,7 +167,7 @@ footer { margin-top: 72px; color: var(--muted); font-size: 13px; }
     <span>圆角矩形 = 步骤 / 窗口</span>
     <span>菱形 = 判定</span>
     <span>macOS 窗口框 = UI 设计示意（按当前主题渲染）</span>
-    <span><span class="dot" style="color:var(--ok)">●</span> 串流中 <span class="dot" style="color:var(--muted)">○</span> 空闲 <span class="dot" style="color:var(--muted)">◌</span> 未启用 <span class="dot" style="color:var(--warn)">▲</span> 离线</span>
+    <span><span class="dot" style="color:var(--ok)">●</span> 串流中 <span class="dot" style="color:var(--ok)">○</span> 空闲 <span class="dot" style="color:var(--muted)">○</span> 未启用 <span class="dot" style="color:var(--warn)">●</span> 离线</span>
   </div>
 </header>
 
@@ -194,8 +194,8 @@ flowchart LR
     <div class="mrow muted">2 屏 · 串流 1 · 实例 2/2</div>
     <div class="msep"></div>
     <div class="mrow"><span class="dot" style="color:var(--ok)">●</span><span>Moon 1 · <b style="color:var(--ok)">串流中</b></span></div>
-    <div class="mrow"><span class="dot" style="color:var(--muted)">○</span><span>Moon 2 · 空闲</span></div>
-    <div class="mrow"><span class="dot" style="color:var(--muted)">◌</span><span style="color:var(--muted)">Moon 3 · 未启用</span></div>
+    <div class="mrow"><span class="dot" style="color:var(--ok)">○</span><span>Moon 2 · 空闲</span></div>
+    <div class="mrow"><span class="dot" style="color:var(--muted)">○</span><span style="color:var(--muted)">Moon 3 · 未启用</span></div>
     <div class="msep"></div>
     <div class="mrow">设置…</div>
     <div class="msep"></div>
@@ -226,7 +226,7 @@ flowchart TD
   <table>
     <tr><th>元素</th><th>交互</th></tr>
     <tr><td>状态聚合行</td><td>「N 屏 · 串流 M · 实例 R/T」，只读不可点；启动失败时显示错误摘要</td></tr>
-    <tr><td>屏幕行</td><td>状态图标（串流中 = 绿实心播放圈 / 空闲 = 灰圈 / 未启用 = 灰虚线圈 / 离线 = 橙警示圈）+ 名称 + 状态词。点击整行反转启用；失败弹错误弹框；图标仅作状态指示</td></tr>
+    <tr><td>屏幕行</td><td>状态图标（串流中 = 绿实心圆 / 空闲 = 绿空心圈 / 未启用 = 灰空心圈 / 离线 = 橙实心圆）+ 名称 + 状态词。点击整行反转启用；失败弹错误弹框；图标仅作状态指示</td></tr>
     <tr><td>设置…</td><td>打开设置窗口（busy 时置灰）</td></tr>
     <tr><td>退出</td><td>⌘Q；退出即停全部实例并销毁全部虚拟屏（生命周期即进程）。开机自启不在菜单——在设置窗口通用页</td></tr>
   </table>
@@ -235,7 +235,7 @@ flowchart TD
 
 <section>
   <div class="sec-head"><span class="sec-no">S3</span><h2>设置窗口框架</h2></div>
-  <p class="sec-desc">标准窗口「MoonRise 设置」，布局参考 macOS 偏好设置窗口：页面 tab 在窗口顶部工具栏（SF Symbols 图标 + 文字，选中项系统强调色），下方为内容区，AppKit NSToolbar 实现。内容驱动高度——页面切换与内容变化时窗口高度实时跟随并自动居中主屏；不可手动拖拽调整。打开时 App 切换为常规激活（Dock 图标 + App 菜单），关闭最后一个窗口后回到纯菜单栏形态。</p>
+  <p class="sec-desc">标准窗口「MoonRise 设置」，页面 tab 在窗口顶部（SwiftUI 标准 TabView + Tab），下方为内容区。内容驱动高度——页面切换与内容变化时窗口高度实时跟随并自动居中主屏；不可手动拖拽调整。打开时 App 切换为常规激活（Dock 图标 + App 菜单），关闭最后一个窗口后回到纯菜单栏形态。</p>
   <div class="macwin" style="max-width:640px">
     <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
     <div class="tabs">
@@ -245,7 +245,7 @@ flowchart TD
       <div class="tab"><span class="ic">🩺</span>诊断</div>
     </div>
     <div class="wbody" style="text-align:center;color:var(--muted);font-size:12.5px;padding-block:36px">
-      页面内容区（各页详见 S4 / S5 / S8 / S9）
+      页面内容区（各页详见 S4 / S5 / S8 / S9）——tab 渲染以 SwiftUI TabView 标准样式为准
     </div>
   </div>
   <div class="figure wide">
@@ -260,7 +260,7 @@ flowchart LR
   <div class="outer-scroll">
   <table>
     <tr><th>元素</th><th>交互</th></tr>
-    <tr><td>顶部 tab</td><td>四项：⚙ gearshape 通用 / 🖥 rectangle.on.rectangle 屏幕管理 / 🔒 lock.shield 权限 / 🩺 stethoscope 诊断（NSToolbar 偏好式工具栏项，图标 + 文字居中）。点击切换页面，选中项图标强调色，窗口高度按内容伸缩并居中；记忆上次停留页（会话内）</td></tr>
+    <tr><td>顶部 tab</td><td>四项：通用 / 屏幕管理 / 权限 / 诊断（SwiftUI 标准 TabView + Tab，macOS 15+）。点击切换页面，窗口高度按内容伸缩并居中；记忆上次停留页（会话内）</td></tr>
     <tr><td>窗口形态</td><td>标准 NSWindow（激活策略切换见上图）；内容驱动高度，侧栏定宽 + 内容区设计定宽，尺寸变化后自动居中主屏可视区；styleMask 不含 .resizable（不手动拖拽调整）</td></tr>
     <tr><td>页内设计语言</td><td>整个 app 统一 macOS 27 设计语言；页内 = macOS 系统设置分组行式：通用 / 诊断页富行（图标 + 标题 + 描述 + 尾部控件 / 状态徽章），屏幕页保留卡片（内部行距与分组对齐系统行规范）</td></tr>
     <tr><td>数字规则</td><td>端口、宽、高等数字一律无千分位分组（47989 而非 47,989），全局适用</td></tr>
