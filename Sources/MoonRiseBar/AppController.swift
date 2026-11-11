@@ -255,7 +255,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.target = self
             item.representedObject = summary.slotID.uuidString
             item.isEnabled = !busy
-            if let symbol = NSImage(systemSymbolName: summary.enabled ? "toggleon" : "toggleoff",
+            // SF Symbol 无 toggleon/toggleoff，用 switch.2 同形不同色表达开关态
+            if let symbol = NSImage(systemSymbolName: "switch.2",
                                     accessibilityDescription: summary.enabled ? "已启用" : "已停用") {
                 let color = summary.enabled ? NSColor.systemGreen : NSColor.secondaryLabelColor
                 item.image = symbol.withSymbolConfiguration(.init(paletteColors: [color]))

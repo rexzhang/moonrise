@@ -399,25 +399,44 @@ struct SettingsRootView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $model.page) {
-                ForEach(SettingsPage.allCases) { page in
-                    Label(page.title, systemImage: page.symbol).tag(page)
+        if #available(macOS 15.0, *) {
+            // macOS 26+ 渲染为窗口顶部工具栏式 tab（图标 + 文字）
+            TabView(selection: $model.page) {
+                Tab("通用", systemImage: "gearshape", value: .general) {
+                    GeneralPageView(model: model)
+                }
+                Tab("屏幕管理", systemImage: "rectangle.on.rectangle", value: .screens) {
+                    ScreensPageView(model: model)
+                }
+                Tab("权限", systemImage: "lock.shield", value: .permission) {
+                    PermissionPageView(model: model)
+                }
+                Tab("诊断", systemImage: "stethoscope", value: .diagnostics) {
+                    DiagnosticsPageView(model: model)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.large)
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
+        } else {
+            // 旧系统回退：分段控件（不渲染图标，仅文字）
+            VStack(spacing: 0) {
+                Picker("", selection: $model.page) {
+                    ForEach(SettingsPage.allCases) { page in
+                        Label(page.title, systemImage: page.symbol).tag(page)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.large)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
 
-            ScrollView {
-                switch model.page {
-                case .general: GeneralPageView(model: model)
-                case .screens: ScreensPageView(model: model)
-                case .permission: PermissionPageView(model: model)
-                case .diagnostics: DiagnosticsPageView(model: model)
+                ScrollView {
+                    switch model.page {
+                    case .general: GeneralPageView(model: model)
+                    case .screens: ScreensPageView(model: model)
+                    case .permission: PermissionPageView(model: model)
+                    case .diagnostics: DiagnosticsPageView(model: model)
+                    }
                 }
             }
         }
