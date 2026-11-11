@@ -4,7 +4,7 @@
 
 ```bash
 swift build                   # 构建
-swift test                    # 单测（身份推导与校验向量、conf 编辑器、规格校验、边界判定、退避序列）
+swift test                    # 单测（56 项：身份/校验向量、conf 编辑、规格校验、边界判定、配置迁移、收敛计划、预设、实例键集/端口/副本、家族判定、串流标记状态机）
 bash scripts/install-app.sh   # 签名并安装为 /Applications/MoonRise.app
 bash scripts/make-cert.sh --trust   # 一次性：生成自签代码签名证书（弹框点"始终信任"）
 ```
@@ -27,11 +27,11 @@ bash scripts/install-app.sh
 ## 模块结构
 
 - Sources/VirtualDisplayObjC：CGVirtualDisplay 私有 API 薄封装（MRC，-fno-objc-arc；运行时类/selector 全量校验，缺失时点名报错，不崩溃）
-- Sources/MoonRiseCore：规格/身份/控制器、配置、状态、Sunshine 联动（ConfFile 多键编辑、ChildProcessSunshineManager）、权限检测
-- Sources/MoonRiseBar：菜单栏 App（AppController / PermissionPanel / DiagnosticsWindow / ResolutionPanel）
+- Sources/MoonRiseCore：规格/身份/多槽控制器/收敛计划/预设库、配置（displays 数组 + 迁移）、状态、Sunshine 集成（ConfFile、InstanceConf、SunshineProcessDiscovery、ChildProcessSunshineManager、SunshineInstanceRegistry、SunshineSync、StreamStateMonitor）、权限检测
+- Sources/MoonRiseBar：菜单栏 App（AppController / DisplayOrchestrator / ScreenManagerWindow / PermissionPanel / DiagnosticsWindow / ResolutionPanel）
 - Tests/MoonRiseCoreTests：核心库单测
 - AGENTS.md / CLAUDE.md：AI 编码代理的项目规则（含硬约束清单，改动 VirtualDisplay 层前必读）
-- Plans/implementation-plan.md：设计决策与实测结论记录
+- Plans/implementation-plan.md：设计决策与实测结论记录；Plans/multi-display-plan.md 与 Plans/multi-display-spike.md：多屏设计与实测报告
 
 ## 签名阶梯
 

@@ -72,6 +72,7 @@ displayID → 轮询活动列表（25ms/5s/泵 run loop）。
 - M2 菜单栏 App：✅ 完成（状态行、重新开始、分辨率菜单+自定义窗、开机自启、退出、install-app.sh）。
 - M3 Sunshine 自动联动（brewServices 编排）：✅ 完成。
 - M4：✅ 诊断窗口；✅ Sunshine 子进程托管整合（managed 默认 + 退出连带停止 + 退避重启 + fork 接管 + brew 解注册 + TCC 归属 MoonRise）；✅ Moon 端到端验收已通过（配对/画质/键鼠/串流验证）。
+- M5 多扩展屏（1-N）：✅ 完成（R1 spike 实测 → Plans/multi-display-spike.md；R2 Core 多屏化——配置数组化/控制器多槽/diff 收敛计划/预设库/HiDPI 开关；R3 Sunshine 多实例——实例目录与 conf 代建/端口分配器/家族排除清杀/逐实例同步/日志尾随串流状态/独立二进制副本；R4 App——统一管理窗口/菜单状态显示/守护多屏化/串行启动；R5 文档修订）。设计定案与实施记录 → Plans/multi-display-plan.md。D16 验收：✅ 通过（真实 App 下 MoonRise 归属双子进程并发捕获，双 VideoToolbox 编码器就绪）。
 
 ## 验证清单（最终出口）
 

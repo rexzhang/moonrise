@@ -46,6 +46,19 @@ public enum SunshineSync {
         }
     }
 
+    /// 扩展屏实例 conf 同步（幂等；缺失代建——实例 conf 为 MoonRise 自有文件）。
+    /// 首屏（sunshinePort == nil）走主 conf 同步，此处直接 .unchanged。
+    /// 返回 .synced 表示 conf 有变化（调用方重启该实例）；.unchanged 表示一致（调用方 start 保活）。
+    public static func syncInstance(display: DisplayConfig, outputName: UInt32, audioDisabled: Bool) throws -> Outcome {
+        guard display.sunshinePort != nil else { return .unchanged }
+        let values = InstanceConf.targetValues(for: display, outputName: outputName, audioDisabled: audioDisabled)
+        let result = try ConfFile.syncValues(
+            configPath: InstanceConf.confURL(for: display.id).path,
+            values: values,
+            createsIfMissing: true)
+        return result == .changed ? .synced : .unchanged
+    }
+
     private static func applyRestart(config: AppConfig, manager: SunshineManaging) throws {
         switch config.sunshine.restartPolicy {
         case .brewServices:

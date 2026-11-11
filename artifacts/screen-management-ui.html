@@ -1,0 +1,383 @@
+<title>扩展屏幕管理 · UI 交互设计</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #f4f5f8; --fg: #1c2230; --muted: #5a6472; --panel: #ffffff; --line: #d9dee6;
+  --accent: #3d56cc; --accent-soft: #e8ecfb; --warn: #946200; --warn-soft: #f6ecd8;
+  --ok: #2e7d46; --ok-soft: #e3f0e8; --err: #b3372f; --err-soft: #f7e6e4;
+  --win: #fbfbfd; --winbar: #e8e9ee; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171e; --fg: #e7eaf0; --muted: #98a2b3; --panel: #1c212b; --line: #2c3442;
+    --accent: #8fa2f5; --accent-soft: #232b41; --warn: #d9a441; --warn-soft: #2e2918;
+    --ok: #6fc28f; --ok-soft: #1b2e23; --err: #e07b72; --err-soft: #3a211f;
+    --win: #1e222b; --winbar: #282d38; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171e; --fg: #e7eaf0; --muted: #98a2b3; --panel: #1c212b; --line: #2c3442;
+  --accent: #8fa2f5; --accent-soft: #232b41; --warn: #d9a441; --warn-soft: #2e2918;
+  --ok: #6fc28f; --ok-soft: #1b2e23; --err: #e07b72; --err-soft: #3a211f;
+  --win: #1e222b; --winbar: #282d38; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); margin: 0; padding-block: 0 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Noto Sans SC", sans-serif;
+  font-size: 15px; line-height: 1.75;
+}
+.wrap { max-width: 780px; margin-inline: auto; }
+header.masthead { padding-block: 56px 8px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.18em; color: var(--muted); margin: 0 0 14px; }
+h1 { font-family: "Noto Serif SC", serif; font-weight: 700; font-size: clamp(30px, 5vw, 42px);
+  line-height: 1.25; margin: 0 0 12px; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 62ch; }
+.legend { margin-top: 28px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px;
+  display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 13px; color: var(--muted); background: var(--panel); }
+.legend b { color: var(--fg); font-weight: 600; }
+.dot { font-weight: 700; }
+section { margin-top: 64px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+.sec-no { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--accent); white-space: nowrap; }
+h2 { font-family: "Noto Serif SC", serif; font-weight: 700; font-size: clamp(21px, 3vw, 26px); margin: 0; text-wrap: balance; }
+.sec-desc { color: var(--muted); margin: 6px 0 0; max-width: 62ch; }
+h3 { font-family: "Noto Serif SC", serif; font-size: 17px; font-weight: 600; margin: 36px 0 10px; }
+.figure { margin-block: 22px; padding: 18px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.figure .mermaid { display: flex; justify-content: center; overflow-x: auto; }
+.mermaid svg { max-width: 100%; height: auto; }
+.figcap { font-size: 13px; color: var(--muted); text-align: center; margin: 12px 12px 0; }
+@media (min-width: 900px) { .wide { margin-inline: calc(50% - min(46vw, 580px)); } }
+@media (min-width: 1300px) { .wide { margin-inline: calc(50% - min(46vw, 700px)); } }
+table { border-collapse: collapse; width: 100%; margin-block: 18px; font-size: 13.5px; }
+.outer-scroll { overflow-x: auto; }
+th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--fg); padding: 8px 12px 8px 0; white-space: nowrap; }
+td { border-bottom: 1px solid var(--line); padding: 9px 12px 9px 0; vertical-align: top; }
+.mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.err { background: var(--err-soft); color: var(--err); }
+.tag.hint { background: var(--accent-soft); color: var(--accent); }
+/* macOS 窗口形态示意 */
+.macwin { background: var(--win); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  margin-block: 20px 8px; box-shadow: 0 4px 18px rgba(0,0,0,.10); max-width: 640px; }
+.winbar { background: var(--winbar); padding: 9px 14px; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--muted); }
+.wdots span { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; }
+.wdots span:nth-child(1){background:#ff5f57}.wdots span:nth-child(2){background:#febc2e}.wdots span:nth-child(3){background:#28c840}
+.wbody { padding: 14px 16px 16px; }
+.wfoot { display: flex; align-items: center; gap: 14px; border-top: 1px solid var(--line); padding: 10px 16px 14px; font-size: 13px; flex-wrap: wrap; }
+.wfoot .spacer { flex: 1; }
+.row { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel); }
+.row .head { display: flex; align-items: center; gap: 10px; font-weight: 600; flex-wrap: wrap; }
+.row .meta { color: var(--muted); font-size: 13px; margin: 2px 0 8px; font-family: "IBM Plex Mono", monospace; }
+.row .meta .copy { border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: 11px; color: var(--fg); background: var(--bg); }
+.row .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { display: inline-block; border: 1px solid var(--line); border-radius: 7px; padding: 2px 11px;
+  font-size: 12.5px; background: var(--bg); color: var(--fg); white-space: nowrap; }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+.btn.danger { border-color: var(--err); color: var(--err); }
+.btn.disabled { opacity: .42; }
+.tgl { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.tgl i { width: 34px; height: 20px; border-radius: 999px; background: var(--ok); position: relative; font-style: normal; }
+.tgl i::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.tgl.off i { background: var(--line); }
+.tgl.off i::after { right: auto; left: 2px; }
+.frow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.frow label { width: 62px; text-align: right; color: var(--muted); font-size: 13px; flex: none; }
+.finput { border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; background: var(--bg); color: var(--fg);
+  font-family: "IBM Plex Mono", monospace; font-size: 13px; min-width: 110px; }
+.fsel { border: 1px solid var(--accent); border-radius: 7px; padding: 4px 10px; background: var(--accent-soft); color: var(--accent); font-size: 13px; }
+.warnline { font-size: 12px; color: var(--warn); margin: -6px 0 12px 72px; }
+.pinbox { display: flex; gap: 8px; margin: 4px 0 10px 72px; }
+.pinbox b { border: 1px solid var(--accent); border-radius: 8px; width: 34px; height: 40px; display: flex;
+  align-items: center; justify-content: center; font-family: "IBM Plex Mono", monospace; font-size: 18px; background: var(--bg); }
+.result-ok { color: var(--ok); } .result-err { color: var(--err); }
+.errline { color: var(--err); font-size: 12px; margin: 6px 0 0; }
+/* 状态胶囊徽章（方案 A：SwiftUI Label + capsule 背景） */
+.pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill.streaming { background: var(--ok); color: #fff; }
+.pill.idle { border: 1px solid var(--muted); color: var(--fg); }
+.pill.disabled { border: 1px dashed var(--muted); color: var(--muted); }
+.pill.offline { background: var(--warn); color: #fff; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-block: 22px; }
+@media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.card h4 { margin: 0 0 4px; font-family: "IBM Plex Mono", monospace; font-size: 14.5px; font-weight: 500; }
+.card .role { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+.card ul { margin: 0; padding: 0; list-style: none; }
+.card li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.card li:first-child { border-top: none; }
+.card .fname { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.card .ftype { color: var(--muted); white-space: nowrap; }
+footer { margin-top: 72px; color: var(--muted); font-size: 13px; }
+/* 配对设备行 */
+.pairdev { border: 1px solid var(--accent); border-radius: 9px; padding: 8px 12px; display: flex; gap: 8px;
+  align-items: center; font-size: 13.5px; background: var(--accent-soft); margin: 6px 0 12px; max-width: 340px; }
+</style>
+
+<div class="wrap">
+<header class="masthead">
+  <p class="eyebrow">MOONRISE · UI 交互设计</p>
+  <h1>扩展屏幕管理 · 交互规格</h1>
+  <p class="lede">三个 SwiftUI 窗口：扩展屏幕管理（信息列表）、屏幕修改窗口（逐屏修改与添加）、配对窗口（PIN 输入）。列表只读为主、修改入独立窗口、配对在 App 内完成；无确认弹窗，后果写在控件文案，忙碌置灰。</p>
+  <div class="legend">
+    <span><b>图例</b></span>
+    <span>圆角矩形 = 步骤 / 窗口</span>
+    <span>菱形 = 判定</span>
+    <span>圆柱 = 文件写入</span>
+    <span>macOS 窗口框 = UI 设计示意（按当前主题渲染）</span>
+    <span><span class="dot" style="color:var(--ok)">●</span> 串流中 <span class="dot" style="color:var(--muted)">○</span> 空闲 / 未启用 <span class="dot" style="color:var(--warn)">▲</span> 离线</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S1</span><h2>窗口关系总览</h2></div>
+  <p class="sec-desc">菜单栏（保持现状：状态显示 + 「扩展屏幕管理…」入口）打开 W1；W1 的每屏按钮分别打开 W2（修改 / 添加自定义）与 W3（配对）；添加菜单选预设即建屏。所有修改即时生效，无统一「应用」暂存。</p>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart LR
+    MENU["菜单栏（状态显示）"] -->|"扩展屏幕管理…"| W1["W1 扩展屏幕管理<br/>（信息列表）"]
+    W1 -->|"修改…"| W2["W2 屏幕修改窗口<br/>（修改屏幕 — 屏名）"]
+    W1 -->|"配对…"| W3["W3 配对窗口<br/>（配对 — 屏名）"]
+    W1 -->|"添加屏幕…"| W2A["W2 添加模式<br/>（预设下拉 + 规格字段）"]
+    W2 -->|"应用修改（校验通过）"| REBUILD["该屏销毁重建 + 实例同步"]
+    W2A -->|"添加（校验通过）"| CREATE["新建槽位 → 建屏 + 实例<br/>（自动编号 / Moon N 命名 / 冻结端口）"]
+    W3 -->|"提交 PIN"| PAIR["实例 /api/pin 配对"]
+    </pre>
+    <p class="figcap">三窗口关系：列表是唯一入口，修改与配对各入独立窗口，动作即时生效</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S2</span><h2>W1 扩展屏幕管理（信息列表）</h2></div>
+  <p class="sec-desc">窗口标题与菜单项同名。每屏一行卡片：只读信息（状态 / IP:端口 / 同步状态）+ 内联控件（启用开关、重启该屏、Web UI、配对…、修改…）。底部工具栏：添加屏幕… 与 保持显示器缩放。状态 1 秒自动刷新（日志尾随）。</p>
+  <div class="macwin">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>扩展屏幕管理</div>
+    <div class="wbody">
+      <div class="row">
+        <div class="head"><span class="pill streaming">● 串流中</span> Moon 1 · 主配置 47989 <span class="tag ok">已同步</span></div>
+        <div class="meta">IP 192.168.200.146:47989 <span class="copy">点击复制</span></div>
+        <div class="btns">
+          <span class="tgl"><i></i>启用</span>
+          <span class="btn">重启该屏</span><span class="btn">Web UI</span>
+          <span class="btn">配对…</span><span class="btn primary">修改…</span>
+          <span class="btn disabled">删除</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="head"><span class="pill idle">○ 空闲</span> Moon 2 · 端口 48089 <span class="tag ok">已同步</span></div>
+        <div class="meta">IP 192.168.200.146:48089 <span class="copy">点击复制</span></div>
+        <div class="btns">
+          <span class="tgl"><i></i>启用</span>
+          <span class="btn">重启该屏</span><span class="btn">Web UI</span>
+          <span class="btn">配对…</span><span class="btn primary">修改…</span>
+          <span class="btn danger">删除</span>
+        </div>
+        <div class="errline">✗ 启用失败：端口 48089 被其它程序占用（示例，保留至下次动作或 5s）</div>
+      </div>
+      <div class="row" style="opacity:.62">
+        <div class="head"><span class="pill disabled">◌ 未启用</span> Moon 3 · 端口 48189</div>
+        <div class="meta">IP 192.168.200.146:48189 <span class="copy">点击复制</span></div>
+        <div class="btns">
+          <span class="tgl off"><i></i>启用</span>
+          <span class="btn disabled">重启该屏</span><span class="btn disabled">Web UI</span>
+          <span class="btn disabled">配对…</span><span class="btn primary">修改…</span>
+          <span class="btn danger">删除</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="head"><span class="pill offline">▲ 离线</span> Moon 4 · 端口 48289</div>
+        <div class="meta">IP 192.168.200.146:48289 <span class="copy">点击复制</span></div>
+        <div class="btns">
+          <span class="tgl"><i></i>启用</span>
+          <span class="btn">重启该屏</span><span class="btn">Web UI</span>
+          <span class="btn">配对…</span><span class="btn primary">修改…</span>
+          <span class="btn danger">删除</span>
+        </div>
+      </div>
+    </div>
+    <div class="wfoot">
+      <span class="btn primary">添加屏幕…</span>
+      <span class="tgl"><i></i>保持显示器缩放</span>
+      <span class="spacer"></span>
+      <span style="color:var(--muted);font-size:12.5px">状态 1s 自动刷新</span>
+    </div>
+  </div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>元素</th><th>交互</th></tr>
+    <tr><td>状态胶囊</td><td>方案 A 彩色胶囊徽章：<span class="pill streaming">● 串流中</span> 绿底白字实心 / <span class="pill idle">○ 空闲</span> 灰描边 / <span class="pill disabled">◌ 未启用</span> 灰虚线描边（卡片降透明） / <span class="pill offline">▲ 离线</span> 橙底白字实心。SwiftUI 实现：Label + capsule 背景。只读，1s 自动刷新</td></tr>
+    <tr><td>IP 行</td><td>首屏显示「主配置 47989」；点击 IP 文本即复制 <span class="mono">IP:端口</span></td></tr>
+    <tr><td>启用 Toggle</td><td>即时生效。ON→OFF：停实例+销屏（首屏联动停主实例）；OFF→ON：建屏+起实例。端口冻结：被占时报错不迁移</td></tr>
+    <tr><td>重启该屏</td><td>即时生效。首屏重启主实例；扩展屏重启对应实例。停用屏置灰</td></tr>
+    <tr><td>Web UI</td><td>打开 <code>https://localhost:端口+1</code>。停用屏置灰</td></tr>
+    <tr><td>配对…</td><td>打开 W3。首屏点击 → Web UI 引导形态。停用屏置灰</td></tr>
+    <tr><td>修改…</td><td>打开 W2（修改模式）。停用屏仍可用；不同屏允许并行窗口，同屏复用置前</td></tr>
+    <tr><td>卡片错误行</td><td>行内动作失败（启用/重启/删除）在卡片内就地红色错误行显示，保留至下次动作或 5s，不弹窗</td></tr>
+    <tr><td>删除</td><td>点击即删（停实例 + 销屏 + 清实例目录），按钮文案自带后果；首屏置灰禁用。停用屏仍可删</td></tr>
+    <tr><td>添加屏幕…</td><td>直接打开 W2 添加模式（预设下拉按分组：MacBook 5 / iPad 6 / Apple 显示器 3 / 通用 4，各项自带 HiDPI 标记 + 规格字段 + 名称）；[添加] 校验通过即创建（自动编号 / Moon N 命名 / 冻结端口）</td></tr>
+    <tr><td>保持显示器缩放</td><td>全局 Toggle，即时写入配置</td></tr>
+    <tr><td>窗口高度</td><td>随卡片数自适应（约 340–680pt，顶部锚定）；宽度最小 660。无卡片时显示空态引导（提示点「添加屏幕…」创建第一块屏）</td></tr>
+    <tr><td>空屏/离线黑线</td><td>列表背景取窗口底色，滚动视口与底栏同色（消除调整高度时的横向黑线）；内容超出窗口的部分可滚动查看</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S3</span><h2>W2 屏幕修改窗口</h2></div>
+  <p class="sec-desc">逐屏独立浮层（380×360）。修改模式标题「修改屏幕 — 屏名」；添加模式标题「添加屏幕」（唯一添加入口）。预设下拉按分组（MacBook 5 / iPad 6 / Apple 显示器 3 / 通用 4）选中即填充宽/高/刷新率与 HiDPI 开关（每个预设自带 HiDPI 支持标记），再手改字段则回到自定义。<b>删除不在本窗口——在 W1 列表卡片</b>。SwiftUI 默认控件风格。</p>
+  <div class="macwin" style="max-width:430px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>修改屏幕 — Moon 2</div>
+    <div class="wbody">
+      <div class="frow"><label>预设</label><span class="fsel">iPad mini 4 · 2048×1536 · HiDPI ✓ ▾</span></div>
+      <div class="frow"><label>名称</label><span class="finput" style="min-width:170px">Moon 2</span></div>
+      <div class="warnline">⚠ 改名将重置该屏位置与 Retina 记忆</div>
+      <div class="frow"><label>宽 / 高</label><span class="finput">2048</span><span class="finput">1536</span></div>
+      <div class="frow"><label>刷新率</label><span class="fsel">60 Hz ▾</span>
+        <label style="width:auto;margin-left:14px">HiDPI</label><span class="tgl"><i></i></span></div>
+      <div class="frow" style="margin-top:16px">
+        <span style="flex:1"></span>
+        <span class="btn">取消</span><span class="btn primary">应用修改（将短暂中断串流）</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:10px" class="mono">停用屏：顶部提示「停用中：修改将在启用后生效」，应用只写配置不建屏</div>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A(["W2 点击 应用修改 / 添加"]) --> B{"规格校验<br/>64–16384px · 1–240Hz"}
+    B -->|不通过| E1["就地报错，窗口保持"]
+    B -->|通过| C{"名称唯一 + 身份向量不撞<br/>（对其余屏校验）"}
+    C -->|冲突| E2["就地报错（名称 / 身份冲突），窗口保持"]
+    C -->|通过| D{"模式"}
+    D -->|修改| F[("config.json UPDATE 槽位字段<br/>名称/宽/高/刷新率/HiDPI")]
+    D -->|添加| G[("config.json INSERT 新槽位<br/>自动编号 + Moon N 命名 + 冻结端口")]
+    F --> H["该屏销毁重建 → 实例同步<br/>（仅名称变化同样重建：身份随名变化）"]
+    G --> I["建屏 + 建实例（含二进制副本）"]
+    H --> J(["关闭窗口 · 列表刷新"])
+    I --> J
+    </pre>
+    <p class="figcap">应用流程：校验链失败就地报错；通过即写盘并执行（无确认弹窗）。删除不在本窗口——在 W1 列表卡片</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S4</span><h2>W3 配对窗口（PIN）</h2></div>
+  <p class="sec-desc">逐屏独立浮层（360×280）。打开即确保实例 Web 凭据可用（空则自动预置），随后 2s 轮询待配对设备；用户输入 Moonlight 显示的 4 位 PIN 提交。首屏打开时为 Web UI 引导形态（主实例凭据归用户，不接管）。布局：待配对设备行 → PIN 输入（4 格）→ 提交配对 / 关闭 → 结果区。</p>
+  <div class="macwin" style="max-width:400px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>配对 — Moon 2</div>
+    <div class="wbody">
+      <div class="pairdev"><span class="dot" style="color:var(--accent)">◉</span> iPad-Pro（192.168.200.88）</div>
+      <div class="frow"><label>PIN</label>
+        <span class="pinbox"><b>2</b><b>1</b><b>7</b><b>2</b></span></div>
+      <div class="frow" style="margin-top:6px">
+        <span class="btn primary">提交配对</span>
+        <span style="flex:1"></span><span class="btn">关闭</span>
+      </div>
+      <p style="font-size:13px;margin:12px 0 0" class="result-ok">✓ 已配对，客户端可连接</p>
+      <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px;font-size:12.5px;color:var(--muted)" class="mono">
+        Web UI 凭据（预置）：<b style="color:var(--fg)">moonrise-m2</b> / ******** <span class="copy" style="border:1px solid var(--line);border-radius:6px;padding:0 6px;color:var(--fg)">复制</span>
+      </div>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A(["打开 W3（扩展屏实例）"]) --> B{"实例 Web 凭据状态"}
+    B -->|"凭据为空"| C[("credentials/webui.json INSERT<br/>随机用户名/密码（0600）")]
+    B -->|"已预置"| D["使用预置凭据"]
+    B -->|"用户已自设"| X["降级提示 + 打开 Web UI 按钮"]
+    C --> D
+    D --> P["每 2s 轮询 GET /api/pin"]
+    P --> Q{"待配对设备？"}
+    Q -->|"无"| P
+    Q -->|有| R["列出设备（名称 + 地址）<br/>等待用户输入 4 位 PIN"]
+    R --> S["提交 POST /api/pin"]
+    S --> T{"结果"}
+    T -->|"成功 ✓"| U["已配对 → 回到轮询（可配下一台）"]
+    T -->|"PIN 错误 ✗"| R
+    T -->|"会话超时"| P
+    </pre>
+    <p class="figcap">配对时序：凭据预置 → 轮询待配对 → PIN 提交 → 三态结果（错误可重输、超时回轮询）</p>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <h4>WebUICredentials</h4>
+      <p class="role">实例 Web 凭据（credentials/webui.json，0600）</p>
+      <ul>
+        <li><span class="fname">username</span><span class="ftype">String（随机生成）</span></li>
+        <li><span class="fname">password</span><span class="ftype">String（随机生成）</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>PendingPairing</h4>
+      <p class="role">待配对会话（GET /api/pin 返回项）</p>
+      <ul>
+        <li><span class="fname">id</span><span class="ftype">String（32 位 hex，配对会话标识）</span></li>
+        <li><span class="fname">name</span><span class="ftype">String（客户端 devicename）</span></li>
+        <li><span class="fname">address</span><span class="ftype">String（客户端地址）</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S5</span><h2>枚举清单</h2></div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>枚举</th><th>值</th><th>语义</th></tr>
+    <tr><td class="mono" rowspan="4">ScreenState</td><td class="mono">streaming</td><td>串流中（客户端已连接该屏）</td></tr>
+    <tr><td class="mono">idle</td><td>空闲（屏在、实例在、无串流）</td></tr>
+    <tr><td class="mono">disabled</td><td>未启用（配置保留、屏与实例不在）</td></tr>
+    <tr><td class="mono">offline</td><td>离线（已启用但屏或实例异常）</td></tr>
+    <tr><td class="mono" rowspan="3">PairingResult</td><td class="mono">success</td><td>配对成功，客户端已持久化，可连接</td></tr>
+    <tr><td class="mono">rejected</td><td>PIN 错误或签名验证失败；客户端重试新 PIN 后可再提交</td></tr>
+    <tr><td class="mono">expired</td><td>配对会话超期；回到轮询等待客户端重新发起</td></tr>
+    <tr><td class="mono" rowspan="2">EditWindowMode</td><td class="mono">edit</td><td>修改模式：含删除按钮，应用 = 更新槽位并重建该屏</td></tr>
+    <tr><td class="mono">add</td><td>添加模式：无删除按钮，应用 = 新建槽位并建屏起实例</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S6</span><h2>冲突与错误规则总表</h2></div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>规则</th><th>级别</th><th>处置</th></tr>
+    <tr><td>规格越界（64–16384px、1–240Hz）</td><td><span class="tag err">错误</span></td><td>W2 就地报错，窗口保持</td></tr>
+    <tr><td>名称重复</td><td><span class="tag err">错误</span></td><td>W2 就地报错，提示冲突名称</td></tr>
+    <tr><td>身份向量撞车（同名同尺寸）</td><td><span class="tag err">错误</span></td><td>W2 就地报错，提示改名称或尺寸</td></tr>
+    <tr><td>删除首屏</td><td><span class="tag err">错误</span></td><td>删除按钮禁用（文案注明首屏不可删除）</td></tr>
+    <tr><td>删除屏</td><td><span class="tag warn">警告</span></td><td>按钮文案自带后果，点击即删（停实例 + 销屏 + 清实例目录），其余屏不受影响</td></tr>
+    <tr><td>改名</td><td><span class="tag warn">警告</span></td><td>名称旁常驻警示；应用即重建该屏（位置与 Retina 记忆重置一次）</td></tr>
+    <tr><td>启用时冻结端口被占</td><td><span class="tag err">错误</span></td><td>就地报错，端口不迁移</td></tr>
+    <tr><td>停用屏的重启 / Web UI / 配对</td><td><span class="tag hint">置灰</span></td><td>按钮禁用（实例不在运行）；修改… 仍可用</td></tr>
+    <tr><td>实例凭据已被用户自设</td><td><span class="tag hint">提示</span></td><td>W3 降级：提示 + 打开 Web UI 按钮（尊重用户凭据）</td></tr>
+    <tr><td>首屏配对</td><td><span class="tag hint">提示</span></td><td>W3 显示 Web UI 配对引导（主实例凭据归用户，不接管）</td></tr>
+    <tr><td>PIN 提交失败 / 会话超时</td><td><span class="tag warn">警告</span></td><td>结果区就地显示；失败可重输，超时回轮询</td></tr>
+    <tr><td>轮询网络错误</td><td><span class="tag hint">提示</span></td><td>就地显示，继续轮询，无弹窗</td></tr>
+    <tr><td>后台动作进行中</td><td><span class="tag hint">置灰</span></td><td>相关按钮全部禁用，状态行显示进行中动作</td></tr>
+  </table>
+  </div>
+</section>
+
+<footer>
+  <p>配套计划：~/.claude/plans/pasted-content-id-10e9-virtual-wreath.md · 实现为 SwiftUI；本文档为实现目标态，代码落地后按此核对。</p>
+</footer>
+</div>
+<script>
+(function () {
+  var attr = document.documentElement.getAttribute('data-theme');
+  var dark = attr === 'dark' || (attr !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: dark ? 'dark' : 'neutral',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif'
+  });
+})();
+</script>

@@ -30,6 +30,24 @@ final class DisplaySpecTests: XCTestCase {
         XCTAssertEqual(spec.modeSpecs.count, 1)
     }
 
+    func testHiDPIOffYieldsOnlyPrimaryMode() {
+        let spec = DisplaySpec(name: "Moon", width: 2560, height: 1600, refreshRate: 60, hiDPI: false)
+        XCTAssertEqual(spec.modeSpecs.count, 1)
+        XCTAssertEqual(spec.modeSpecs[0][0].intValue, 2560)
+    }
+
+    func testHiDPIOffRejectsLogicalBounds() {
+        let spec = DisplaySpec(name: "Moon", width: 2560, height: 1600, refreshRate: 60, hiDPI: false)
+        XCTAssertTrue(DisplayList.boundsAcceptable(CGRect(x: 0, y: 0, width: 2560, height: 1600), spec: spec))
+        XCTAssertFalse(DisplayList.boundsAcceptable(CGRect(x: 0, y: 0, width: 1280, height: 800), spec: spec))
+    }
+
+    func testDecodeLegacySpecWithoutHiDPIKeyDefaultsTrue() throws {
+        let json = #"{"name": "Moon", "width": 2560, "height": 1600, "refreshRate": 60}"#
+        let spec = try JSONDecoder().decode(DisplaySpec.self, from: Data(json.utf8))
+        XCTAssertTrue(spec.hiDPI)
+    }
+
     func testBoundsAcceptance() {
         let spec = DisplaySpec(name: "s", width: 2560, height: 1600, refreshRate: 60)
         // 1:1 初始模式

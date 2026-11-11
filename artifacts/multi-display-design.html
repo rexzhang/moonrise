@@ -1,0 +1,717 @@
+<title>MoonRise 多屏设计</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f4f5f8;
+  --fg: #1c2230;
+  --muted: #5a6472;
+  --panel: #ffffff;
+  --line: #d9dee6;
+  --accent: #3d56cc;
+  --accent-soft: #e8ecfb;
+  --warn: #946200;
+  --warn-soft: #f6ecd8;
+  --err: #b3372f;
+  --err-soft: #f7e6e4;
+  --ok: #2e7d46;
+  --ok-soft: #e3f0e8;
+  --code-bg: #eceff5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171e;
+    --fg: #e7eaf0;
+    --muted: #98a2b3;
+    --panel: #1c212b;
+    --line: #2c3442;
+    --accent: #8fa2f5;
+    --accent-soft: #232b41;
+    --warn: #d9a441;
+    --warn-soft: #2e2918;
+    --err: #e07b72;
+    --err-soft: #3a211f;
+    --ok: #6fc28f;
+    --ok-soft: #1b2e23;
+    --code-bg: #10131a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171e;
+  --fg: #e7eaf0;
+  --muted: #98a2b3;
+  --panel: #1c212b;
+  --line: #2c3442;
+  --accent: #8fa2f5;
+  --accent-soft: #232b41;
+  --warn: #d9a441;
+  --warn-soft: #2e2918;
+  --err: #e07b72;
+  --err-soft: #3a211f;
+  --ok: #6fc28f;
+  --ok-soft: #1b2e23;
+  --code-bg: #10131a;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  margin: 0;
+  padding-block: 0 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Noto Sans SC", sans-serif;
+  font-size: 15px;
+  line-height: 1.75;
+}
+.wrap { max-width: 760px; margin-inline: auto; }
+header.masthead { padding-block: 56px 8px; }
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+h1 {
+  font-family: "Noto Serif SC", serif;
+  font-weight: 700;
+  font-size: clamp(30px, 5vw, 42px);
+  line-height: 1.25;
+  margin: 0 0 12px;
+  text-wrap: balance;
+}
+.lede { color: var(--muted); margin: 0; max-width: 62ch; }
+.legend {
+  margin-top: 28px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--panel);
+}
+.legend b { color: var(--fg); font-weight: 600; }
+.dot { color: var(--ok); font-weight: 700; }
+.dot-off { color: var(--muted); font-weight: 700; }
+.dot-err { color: var(--warn); font-weight: 700; }
+section { margin-top: 64px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+.sec-no {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+h2 {
+  font-family: "Noto Serif SC", serif;
+  font-weight: 700;
+  font-size: clamp(21px, 3vw, 26px);
+  margin: 0;
+  text-wrap: balance;
+}
+.sec-desc { color: var(--muted); margin: 6px 0 0; max-width: 62ch; }
+.figure {
+  margin-block: 24px;
+  padding: 18px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.figure .mermaid { display: flex; justify-content: center; overflow-x: auto; }
+.mermaid svg { max-width: 100%; height: auto; }
+.figcap {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  margin: 12px 12px 0;
+}
+.figgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-block: 24px;
+}
+.figgrid .figure { margin-block: 0; }
+h3 {
+  font-family: "Noto Serif SC", serif;
+  font-size: 17px;
+  font-weight: 600;
+  margin: 40px 0 12px;
+}
+@media (min-width: 900px) {
+  .wide { margin-inline: calc(50% - min(46vw, 560px)); }
+}
+@media (min-width: 1300px) {
+  .wide { margin-inline: calc(50% - min(46vw, 700px)); }
+}
+@media (max-width: 720px) {
+  .figgrid { grid-template-columns: 1fr; }
+}
+table { border-collapse: collapse; width: 100%; margin-block: 20px; font-size: 13.5px; }
+.outer-scroll { overflow-x: auto; }
+th {
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid var(--fg);
+  padding: 8px 12px 8px 0;
+  white-space: nowrap;
+}
+td { border-bottom: 1px solid var(--line); padding: 9px 12px 9px 0; vertical-align: top; }
+td.mono, .mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.tag {
+  display: inline-block;
+  font-size: 12px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.tag.err { background: var(--err-soft); color: var(--err); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.auto { background: var(--ok-soft); color: var(--ok); }
+.tag.hint { background: var(--accent-soft); color: var(--accent); }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-block: 24px; }
+@media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.card h4 {
+  margin: 0 0 4px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.card .role { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+.card ul { margin: 0; padding: 0; list-style: none; }
+.card li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.card li:first-child { border-top: none; }
+.card .fname { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.card .ftype { color: var(--muted); white-space: nowrap; }
+footer { margin-top: 72px; color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
+/* 界面形态示意 */
+.uimocks {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 16px;
+  margin-block: 24px;
+}
+@media (max-width: 720px) { .uimocks { grid-template-columns: 1fr; } }
+.mock {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.mock .mtitle { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 10px; }
+.mm-line {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+.mm-line.dim { color: var(--muted); }
+.mm-line.act:hover { background: var(--accent-soft); }
+.mm-sep { height: 1px; background: var(--line); margin: 6px 0; }
+.mm-hint { color: var(--muted); font-family: -apple-system, "PingFang SC", sans-serif; font-size: 11.5px; margin-left: 10px; }
+.mc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.mc-btn {
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 8px;
+  color: var(--fg);
+  background: var(--code-bg);
+  white-space: nowrap;
+}
+.mc-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+.mc-in {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+  background: var(--code-bg);
+  color: var(--muted);
+}
+.mc-warn { font-size: 11.5px; color: var(--warn); }
+.mc-del {
+  display: inline-block;
+  font-size: 11.5px;
+  border: 1px solid var(--err);
+  color: var(--err);
+  border-radius: 6px;
+  padding: 1px 8px;
+  margin-top: 8px;
+}
+.mc-apply {
+  margin-top: 14px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  text-align: center;
+}
+.mock.ghost { opacity: 0.55; }
+</style>
+
+<div class="wrap">
+<header class="masthead">
+  <p class="eyebrow">MOONRISE · 设计文档</p>
+  <h1>多扩展屏幕设计</h1>
+  <p class="lede">1-N 块虚拟扩展屏：每屏独立分辨率与 HiDPI、独立可连的串流实例（Moon N 自动命名，主机名与屏名对应）、逐屏启用开关（持久化）、菜单栏状态可见；全部管理操作收敛于统一管理窗口，菜单栏只做状态显示。</p>
+  <div class="legend">
+    <span><b>图例</b></span>
+    <span>圆角矩形 = 操作步骤</span>
+    <span>菱形 = 判定</span>
+    <span>圆柱 = 配置/状态文件写入</span>
+    <span>圆 = 起止</span>
+    <span><span class="tag err">错误</span><span class="tag warn">警告</span><span class="tag auto">自动</span><span class="tag hint">提示</span> = 规则级别</span>
+    <span><span class="dot">●</span> 串流中 <span class="dot-off">○</span> 空闲/未启用 <span class="dot-err">▲</span> 离线</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S1</span><h2>总体架构与数据流</h2></div>
+  <p class="sec-desc">每块屏绑定一个 Sunshine 实例。首屏绑定用户主 sunshine.conf（默认端口 47989，不可删除）；第 2..N 屏绑定 MoonRise 自有实例（实例目录含独立 conf、独立二进制副本、独立凭据与日志，端口 48089 起步进 100），由 MoonRise 子进程托管、不受 brew 编排影响；二进制副本独立路径是 macOS 27 同路径捕获串行化的对策（spike S7）。变更经 diff 收敛且只对已启用屏生效：只动目标屏，保留屏的串流不中断。实例主机名 sunshine_name = 屏幕显示名，所有屏一致。</p>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    CFG[("config.json · displays 数组（每屏含 enabled 开关）")] --> PLAN{"diff 收敛计划（仅已启用屏）"}
+    RUN["运行态槽位表（displayID 与串流状态）"] --> PLAN
+    PLAN -->|"新建 create"| C1["建虚拟屏（目标槽位）"]
+    PLAN -->|"移除 remove"| D1["停对应实例 → 销虚拟屏"]
+    PLAN -->|"重建 rebuild"| B1["销该屏 → 按新规格重建 → displayID 变则重写实例配置"]
+    PLAN -->|"保留 keep"| K1["不动：串流不中断"]
+    C1 --> SYNC["逐实例配置同步（output_name / sunshine_name / port / 凭据）"]
+    B1 --> SYNC
+    D1 --> SYNC
+    SYNC --> MAIN[("主 sunshine.conf · output_name + stream_audio + sunshine_name")]
+    SYNC --> INST[("实例 conf · output_name + stream_audio + port + sunshine_name + 凭据")]
+    MAIN --> SA["Sunshine 实例 1 · 端口 47989 · 主机名 Moon 1"]
+    INST --> SB["Sunshine 实例 2..N · 端口 48089 起 · 主机名 Moon N"]
+    SA --> MA["Moonlight 客户端 A → 屏 1"]
+    SB --> MB["Moonlight 客户端 B → 屏 2…"]
+    C1 -.-> ST[("state.json · 诊断状态（逐屏）")]
+    </pre>
+    <p class="figcap">配置驱动收敛：文件节点即本设计全部持久化写入点（config.json 更新槽位数组；实例 conf 逐实例更新；state.json 诊断落盘）</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S2</span><h2>生命周期状态机</h2></div>
+  <p class="sec-desc">屏幕槽位的「已停用」态：配置槽位与冻结属性保留，屏幕与实例不在运行；开关状态持久化，重启后按上次状态恢复。删除为标记式：卡片标记待删除，统一应用时才真正移除槽位并清理实例目录。实例进程独立成机，异常退出走退避重启。</p>
+  <div class="figure wide">
+    <pre class="mermaid">
+stateDiagram-v2
+    direction TB
+    state "已停用（配置槽位保留）" as Disabled
+    state "待删除（标记，可撤销）" as PendingDelete
+    state "创建中" as Creating
+    state "运行中" as Running
+    state "重建中" as Rebuilding
+    [*] --> Creating: 新增屏幕（预设即建，冻结命名与端口）
+    Creating --> Running: 激活且边界合法
+    Creating --> [*]: 带盐重试仍失败（回滚移除槽位）
+    Running --> Rebuilding: 改分辨率 / 改名 / HiDPI 切换（应用）
+    Rebuilding --> Running: 新屏就绪并重同步实例
+    Running --> Disabled: 停用（应用：停实例 + 销屏，槽位保留）
+    Disabled --> Creating: 启用（按冻结端口重建）
+    Running --> PendingDelete: 卡片点击删除（标记置灰，可撤销）
+    PendingDelete --> Running: 再次点击撤销标记
+    PendingDelete --> [*]: 统一应用（移除槽位 + 清理实例目录；首屏除外）
+    </pre>
+    <p class="figcap">屏幕槽位状态机（rebuild 只影响单槽；停用与待删除屏不被看门狗/回调复活）</p>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+stateDiagram-v2
+    direction TB
+    state "未启动" as Stopped
+    state "运行中" as Up
+    state "退避重启中" as Backoff
+    [*] --> Stopped
+    Stopped --> Up: 同步成功 / 保活拉起
+    Up --> Up: 值未变（幂等保活）
+    Up --> Backoff: 异常退出（5s 起倍增，封顶 60s）
+    Backoff --> Up: 延迟到期重新拉起
+    Up --> Stopped: 停用 / 删除 / App 退出
+    </pre>
+    <p class="figcap">Sunshine 实例进程状态机（每屏一个实例，互不影响；首屏按 restartPolicy 编排）</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S3</span><h2>变更操作流程</h2></div>
+  <p class="sec-desc">五类操作全部在统一管理窗口完成。「应用」只提交改动屏（脏标记驱动）；新增选预设即创建；删除为标记式、应用前可撤销；运维动作（重启 / Web UI / 复制 IP:端口）即时执行；无确认弹窗，后果提示在控件文案上。</p>
+  <div class="figgrid">
+    <div class="figure">
+      <pre class="mermaid">
+flowchart TD
+    A([管理窗口：添加屏幕]) --> B["预设面板子窗口（Apple 设备 / 通用 / 自定义…）"]
+    B --> C["分配编号 = 现有最大 + 1"]
+    C --> D["自动命名 Moon N（跳过已用名）"]
+    D --> E["分配实例端口（占用探测，步进 100）"]
+    E --> F[("config.json 追加槽位（冻结命名与端口，enabled = 是）")]
+    F --> G["建虚拟屏 → 生成实例 conf → 启动实例"]
+    G --> H["窗口内引导：显示器排列 / 添加 IP：端口 主机"]
+      </pre>
+      <p class="figcap">新增屏幕（选预设即创建）</p>
+    </div>
+    <div class="figure">
+      <pre class="mermaid">
+flowchart TD
+    A([管理窗口：切换启用开关 → 应用]) --> B{"目标状态"}
+    B -->|停用| C["停该屏实例 → 销该屏"]
+    C --> D[("config.json：enabled = 否（编号/名称/端口/规格保留）")]
+    D --> E{"是首屏？"}
+    E -->|是| F["主实例一并停止（防 output_name 悬空回退捕获 host 屏）"]
+    B -->|启用| G[("config.json：enabled = 是")]
+    G --> H{"冻结端口被占？"}
+    H -->|是| I["报错提示（端口冻结，不迁移）"]
+    H -->|否| J["建虚拟屏 → 启动该实例"]
+      </pre>
+      <p class="figcap">启用 / 停用（持久化，重启按上次状态恢复）</p>
+    </div>
+    <div class="figure">
+      <pre class="mermaid">
+flowchart TD
+    A([管理窗口：卡片点击删除]) --> B["标记待删除（卡片置灰，可再点撤销）"]
+    B --> C["统一应用（文案标注：含删除 N 屏）"]
+    C --> D{"是首屏？"}
+    D -->|是| E["拒绝（首屏绑定主配置）"]
+    D -->|否| F["停对应 Sunshine 实例 → 销虚拟屏"]
+    F --> G[("config.json 移除槽位（编号留洞）+ 清理实例目录")]
+    G --> H([其余屏串流不中断])
+      </pre>
+      <p class="figcap">删除屏幕（标记式，应用前可撤销）</p>
+    </div>
+    <div class="figure">
+      <pre class="mermaid">
+flowchart TD
+    A([管理窗口：编辑规格 → 应用]) --> B{"规格校验（64–16384px，1–240Hz）"}
+    B -->|不通过| C["就地报错并提示范围"]
+    B -->|通过| D[("config.json 更新该槽规格")]
+    D --> E["销该屏 → 按新规格重建（HiDPI 关 = 仅 1:1 模式）"]
+    E --> F{"displayID 变化？"}
+    F -->|是| G[("重写该实例 conf 的 output_name")]
+    G --> H["仅重启该实例"]
+    F -->|否| I["不动实例"]
+      </pre>
+      <p class="figcap">修改分辨率 / HiDPI</p>
+    </div>
+    <div class="figure">
+      <pre class="mermaid">
+flowchart TD
+    A([管理窗口：编辑名称 → 应用]) --> B["静态警示：该屏位置与 Retina 记忆将重置"]
+    B --> C{"唯一性校验（名称不重 + 身份向量不撞）"}
+    C -->|不通过| D["就地报错并提示冲突"]
+    C -->|通过| E[("config.json 更新显示名（任意唯一名）")]
+    E --> F["销该屏 → 以新名重建（身份随名变化）"]
+    F --> G[("重写该实例 conf 的 output_name 与 sunshine_name")]
+    G --> H["仅重启该实例"]
+      </pre>
+      <p class="figcap">重命名（客户端主机名随之更新）</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S4</span><h2>守护与恢复流程</h2></div>
+  <p class="sec-desc">启动收敛、周期守护、系统回调、串流状态监控与退出清理五条路径，全部按槽位精确处置；停用与待删除屏不参与守护复活。串流状态由日志尾随近实时判定、看门狗对账兜底。</p>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    subgraph BOOT["启动（按上次开关状态恢复）"]
+      direction TB
+      B1([App 启动]) --> B2[("读 config.json（旧单屏格式自动迁移）")]
+      B2 --> B3{"捕获 / 输入权限齐备？"}
+      B3 -->|否| B4["弹出权限引导面板"]
+      B3 -->|是| B5["快照 host 显示模式基线"]
+      B4 --> B5
+      B5 --> B6["diff 收敛：仅对已启用屏逐槽建屏"]
+      B6 --> B7["逐实例配置同步与启动（串行，spike S7）"]
+      B7 --> B8[("state.json 逐屏落盘")]
+      B8 --> B9["启动看门狗与日志监控"]
+    end
+    subgraph WATCH["看门狗（每 30s）"]
+      direction TB
+      W1{"逐槽存活检查（仅已启用屏）"} -->|有槽丢失| W2["仅重建丢失槽"]
+      W3{"逐实例保活（停用屏不拉起）"} -->|有实例未运行| W4["仅拉起该实例"]
+      W5{"捕获权限新近授予？"} -->|是| W6["重启全部运行中实例"]
+      W7{"串流状态对账"} -->|与日志尾随不符| W8["纠偏每屏状态"]
+    end
+    subgraph CB["显示器重配置回调"]
+      direction TB
+      C1{"本槽 displayID 被移除？"} -->|是| C2["仅重建该槽"]
+      C3{"拓扑变化？"} -->|是| C4["去抖 0.08s 恢复 host 缩放"]
+    end
+    subgraph MON["串流状态监控（驱动菜单栏）"]
+      direction TB
+      M1["逐实例日志尾随（近实时、秒级）"] --> M2{"串流开始 / 结束标记"}
+      M2 --> M3["每屏状态：串流中 / 空闲 / 未启用 / 离线"]
+      M3 --> M4["菜单栏每屏状态行（点击定位管理窗口）"]
+    end
+    subgraph EXIT["退出"]
+      direction TB
+      E1([App 退出]) --> E2["逐槽销毁虚拟屏"]
+      E2 --> E3["逐实例停止 Sunshine"]
+      E3 --> E4["恢复 host 缩放基线"]
+    end
+    </pre>
+    <p class="figcap">五条守护路径：任何失败都收敛到单槽/单实例粒度，不波及其余屏</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S5</span><h2>客户端发现与配对</h2></div>
+  <p class="sec-desc">自动发现是硬需求：服务端 mDNS 按实例注册、端口随实例派生，同机多实例由系统自动加后缀区分；连接后主机名 = sunshine_name，与屏名一一对应，方便用户选择。客户端实测覆盖一台 Mac（moonlight-qt）+ 一台 iPad；手动添加 IP：端口 为兜底主路径。配对优先共享 CA（一次配对全实例可用）。多客户端并发输入不限制（共享物理光标，文档标注）。</p>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart LR
+    C(["Moonlight 客户端"]) --> D{"发现方式"}
+    D -->|"自动搜索"| L["不可用：客户端按 IP 去重（spike S6 实测）"]
+    D -->|"手动添加"| M["输入 IP：端口（管理窗口一键复制）"]
+    M --> P{"逐实例 PIN 配对（管理窗口引导，spike S2：免配对不成立）"}
+    P --> NM["主机名 = sunshine_name（与屏名 Moon N 一一对应，实测有效）"]
+    NM --> T["选择对应屏串流"]
+    T --> U["菜单栏该屏标记：串流中"]
+    </pre>
+    <p class="figcap">发现与配对实测结论：手动添加为主路径；逐实例 PIN；名称对应有效；连接状态回流菜单栏</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S6</span><h2>统一管理窗口与菜单形态</h2></div>
+  <p class="sec-desc">全部管理操作收敛于统一管理窗口（允许弹出式交互子窗口）；菜单栏只做状态显示，每屏状态行点击即定位窗口卡片。「应用」脏标记驱动、只提交改动屏；运维动作即时执行。</p>
+  <div class="uimocks">
+    <div class="mock">
+      <p class="mtitle">菜单栏下拉（只做状态显示）</p>
+      <div class="mm-line dim">2 屏 · 串流 1 · 实例 2/2</div>
+      <div class="mm-sep"></div>
+      <div class="mm-line act"><span class="dot">●</span> Moon 1 · 串流中<span class="mm-hint">点击 → 定位窗口卡片</span></div>
+      <div class="mm-line act"><span class="dot-off">○</span> Moon 2 · 未启用</div>
+      <div class="mm-sep"></div>
+      <div class="mm-line act">管理屏幕…</div>
+      <div class="mm-line act">Sunshine ▸（状态 / 禁用音频串流 / 重启全部实例 / 重新同步）</div>
+      <div class="mm-sep"></div>
+      <div class="mm-line act">权限引导… · 诊断… · 开机自启</div>
+      <div class="mm-line act">退出 MoonRise</div>
+    </div>
+    <div class="mock">
+      <p class="mtitle">统一管理窗口（唯一管理入口）</p>
+      <div class="mc-head"><span class="dot">●</span> Moon 1 · 192.168.1.10:47989 <span class="mc-btn">复制 IP:端口</span><span class="mc-btn">Web UI</span><span class="mc-btn">重启该屏</span></div>
+      <div class="mc-field">名称 <span class="mc-in">Moon 1</span></div>
+      <div class="mc-warn">⚠ 改名将重置该屏位置与 Retina 记忆（任意唯一名，校验兜底）</div>
+      <div class="mc-field">分辨率 <span class="mc-in">2560×1600</span> 刷新率 <span class="mc-in">60 Hz</span> HiDPI <span class="mc-in">✓</span> 启用 <span class="mc-in">✓</span></div>
+      <div class="mc-del">删除（应用时执行 · 可撤销）</div>
+      <div class="mock ghost" style="margin-top:12px;">
+        <div class="mc-head"><span class="dot-off">○</span> Moon 3 · 待删除（应用时移除，点击可撤销）</div>
+      </div>
+      <div class="mc-apply">应用 — 只提交改动屏（含删除时标注：含删除 N 屏）</div>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A([管理窗口：点击应用]) --> B["收集脏卡片（编辑 / 启停 / 删除标记；新增已即时创建）"]
+    B --> C{"存在删除标记？"}
+    C -->|是| D["应用文案已标注：含删除 N 屏"]
+    C -->|否| E["逐屏 diff"]
+    D --> E
+    E --> F["逐屏处置：规格重建 / 启停切换 / 移除删除槽"]
+    F --> G[("config.json 写盘")]
+    G --> H["逐实例配置同步（只重启受影响实例）"]
+    H --> I(["其余屏串流不中断"])
+    </pre>
+    <p class="figcap">统一应用提交流程：一次提交只重建改动屏</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S7</span><h2>Spike 验证项（实施前置）</h2></div>
+  <p class="sec-desc">2026-11-10 已完成（M4 · macOS 27.2 · Sunshine 2026.914.233613），完整记录见 Plans/multi-display-spike.md。客户端：一台 Mac（moonlight-qt）+ 一台 iPad。</p>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>#</th><th>验证项</th><th>结果</th><th>结论 / 对策</th></tr>
+    <tr><td class="mono">S1</td><td>双实例共存</td><td><span class="tag auto">通过</span></td><td>两实例存活、各自钉住各自屏；前提为不同二进制路径（见 S7）</td></tr>
+    <tr><td class="mono">S2</td><td>共享 CA 免重复配对</td><td><span class="tag err">不成立</span></td><td>客户端按主机条目各自配对；逐实例 PIN + 管理窗口配对引导转正（用户已接受）</td></tr>
+    <tr><td class="mono">S3</td><td>双并发串流</td><td><span class="tag auto">通过</span></td><td>双路 VideoToolbox ≥12 分钟零断连，单路约 38% CPU</td></tr>
+    <tr><td class="mono">S4</td><td>输入注入坐标</td><td><span class="tag auto">通过</span></td><td>键鼠各归各屏，四角点击无串扰</td></tr>
+    <tr><td class="mono">S5</td><td>日志分流 + 串流标记</td><td><span class="tag auto">通过</span></td><td>log_path 逐实例分流有效；实例状态文件独立；无共享写冲突</td></tr>
+    <tr><td class="mono">S6</td><td>自动发现 + 名称对应</td><td><span class="tag warn">部分通过</span></td><td>自动发现不可用（客户端按 IP 去重），手动添加为主路径；sunshine_name 名称对应实测有效</td></tr>
+    <tr><td class="mono">S7</td><td>捕获路径序列化（新发现）</td><td><span class="tag warn">关键机制</span></td><td>同二进制路径并发捕获即永久挂起；对策 = 每实例独立二进制副本路径；遗留验证：MoonRise 归属下双子进程并发捕获（实现期 R3 验收必做）</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S8</span><h2>关键对象</h2></div>
+  <p class="sec-desc">设计层对象卡：类型为概念标注（实现语言类型见实施）。</p>
+  <div class="cards">
+    <div class="card">
+      <h4>AppConfig</h4>
+      <p class="role">应用配置（config.json）</p>
+      <ul>
+        <li><span class="fname">displays</span><span class="ftype">屏幕槽位数组</span></li>
+        <li><span class="fname">keepHostScaling</span><span class="ftype">布尔（全局）</span></li>
+        <li><span class="fname">sunshine</span><span class="ftype">全局 Sunshine 设置</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>DisplayConfig</h4>
+      <p class="role">单屏槽位（displays 元素）</p>
+      <ul>
+        <li><span class="fname">id</span><span class="ftype">UUID（持久锚）</span></li>
+        <li><span class="fname">slotNumber</span><span class="ftype">整数（留洞编号）</span></li>
+        <li><span class="fname">name</span><span class="ftype">文本（自动 Moon N，可改唯一名）</span></li>
+        <li><span class="fname">width / height / refreshRate</span><span class="ftype">整数</span></li>
+        <li><span class="fname">hiDPI</span><span class="ftype">布尔（默认开）</span></li>
+        <li><span class="fname">enabled</span><span class="ftype">布尔（开关状态，持久化）</span></li>
+        <li><span class="fname">sunshinePort</span><span class="ftype">整数或空（首屏空 = 主配置）</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>实例 conf 键集</h4>
+      <p class="role">第 2..N 屏实例配置（允许代建）</p>
+      <ul>
+        <li><span class="fname">output_name</span><span class="ftype">该屏 displayID</span></li>
+        <li><span class="fname">sunshine_name</span><span class="ftype">屏幕显示名（客户端主机名）</span></li>
+        <li><span class="fname">stream_audio</span><span class="ftype">enabled / disabled（全局同值）</span></li>
+        <li><span class="fname">port</span><span class="ftype">实例 base 端口（冻结）</span></li>
+        <li><span class="fname">credentials_file</span><span class="ftype">指向实例目录（独立配对状态）</span></li>
+        <li><span class="fname">pkey / cert</span><span class="ftype">实例目录内独立 CA（spike S2：凭据自包含）</span></li>
+        <li><span class="fname">log_path</span><span class="ftype">按实例分流（spike S5 实测有效）</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>ScreenRuntimeState</h4>
+      <p class="role">诊断状态（state.json，只写不读）</p>
+      <ul>
+        <li><span class="fname">slotID / name</span><span class="ftype">槽位与显示名</span></li>
+        <li><span class="fname">displayID</span><span class="ftype">系统显示器标识</span></li>
+        <li><span class="fname">spec</span><span class="ftype">宽高 / 刷新率 / HiDPI</span></li>
+        <li><span class="fname">enabled</span><span class="ftype">开关状态</span></li>
+        <li><span class="fname">streaming</span><span class="ftype">串流中 / 空闲</span></li>
+        <li><span class="fname">port</span><span class="ftype">实例端口</span></li>
+        <li><span class="fname">syncStatus</span><span class="ftype">实例同步结果</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S9</span><h2>枚举清单</h2></div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>枚举</th><th>值</th><th>语义</th></tr>
+    <tr><td class="mono" rowspan="3">Phase</td><td class="mono">starting</td><td>启动中（尚未完成首轮收敛）</td></tr>
+    <tr><td class="mono">running</td><td>运行中（携带逐屏摘要：displayID / 规格 / 实例与串流状态）</td></tr>
+    <tr><td class="mono">degraded</td><td>降级（致命错误，如私有 API 失效；携带原因）</td></tr>
+    <tr><td class="mono" rowspan="4">ReconcileAction</td><td class="mono">create</td><td>配置有且已启用、运行无 → 建屏并建实例</td></tr>
+    <tr><td class="mono">remove</td><td>运行有、配置无或已停用 → 停实例并销屏</td></tr>
+    <tr><td class="mono">rebuild</td><td>同槽规格或名称变化 → 销毁重建该槽</td></tr>
+    <tr><td class="mono">keep</td><td>一致 → 不动（串流不中断）</td></tr>
+    <tr><td class="mono" rowspan="3">RestartPolicy</td><td class="mono">managed</td><td>默认：MoonRise 子进程托管，退出连带停止（首屏）</td></tr>
+    <tr><td class="mono">brewServices</td><td>回退：首屏走 brew services 编排；扩展屏实例仍由 MoonRise 托管</td></tr>
+    <tr><td class="mono">manual</td><td>只写配置，提示手动重启</td></tr>
+    <tr><td class="mono" rowspan="3">RunState</td><td class="mono">idle</td><td>实例未运行</td></tr>
+    <tr><td class="mono">running</td><td>实例运行中</td></tr>
+    <tr><td class="mono">crashed</td><td>异常退出，退避重启中（第 N 次失败）</td></tr>
+    <tr><td class="mono" rowspan="4">ScreenState</td><td class="mono">streaming</td><td>串流中（客户端已连接该屏）</td></tr>
+    <tr><td class="mono">idle</td><td>空闲（屏在、实例在、无串流）</td></tr>
+    <tr><td class="mono">disabled</td><td>未启用（配置保留、屏与实例不在）</td></tr>
+    <tr><td class="mono">offline</td><td>离线（已启用但屏或实例异常）</td></tr>
+    <tr><td class="mono" rowspan="6">SunshineSyncOutcome</td><td class="mono">synced</td><td>配置有变化，已写盘并重启成功</td></tr>
+    <tr><td class="mono">started</td><td>配置未变，确保实例在跑</td></tr>
+    <tr><td class="mono">unchanged</td><td>本来就一致，未动</td></tr>
+    <tr><td class="mono">notInstalled</td><td>Sunshine 未安装（提示安装指引）</td></tr>
+    <tr><td class="mono">missingConfig</td><td>主配置不存在（提示先运行一次 Sunshine）</td></tr>
+    <tr><td class="mono">failed</td><td>其它失败（携带原因）</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S10</span><h2>冲突与错误规则总表</h2></div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>规则</th><th>级别</th><th>处置</th></tr>
+    <tr><td>显示名重复</td><td><span class="tag err">错误</span></td><td>应用时就地报错，提示冲突</td></tr>
+    <tr><td>身份向量撞车（同名同尺寸）</td><td><span class="tag err">错误</span></td><td>创建与改名时校验拒绝</td></tr>
+    <tr><td>删除首屏</td><td><span class="tag err">错误</span></td><td>UI 禁止（首屏绑定主配置；允许停用）</td></tr>
+    <tr><td>规格越界（64–16384px、1–240Hz）</td><td><span class="tag err">错误</span></td><td>就地报错并提示合法范围</td></tr>
+    <tr><td>改名</td><td><span class="tag warn">警告</span></td><td>名称旁静态警示文案，应用直接执行；重置该屏位置与 Retina 记忆</td></tr>
+    <tr><td>删除屏（含串流中）</td><td><span class="tag warn">警告</span></td><td>标记式待应用（卡片置灰、可撤销），应用文案标注含删除 N 屏；按钮文案自带后果提示</td></tr>
+    <tr><td>新屏分配端口被占</td><td><span class="tag auto">自动</span></td><td>占用探测后取下一个步进端口，再冻结</td></tr>
+    <tr><td>启用时冻结端口被占</td><td><span class="tag err">错误</span></td><td>端口不迁移，报错并提示诊断</td></tr>
+    <tr><td>停用首屏</td><td><span class="tag auto">自动</span></td><td>允许；主实例一并停止，防 output_name 悬空回退捕获 host 屏</td></tr>
+    <tr><td>实例 conf 缺失</td><td><span class="tag auto">自动</span></td><td>代建（MoonRise 自有文件）</td></tr>
+    <tr><td>实例二进制副本与源不一致</td><td><span class="tag auto">自动</span></td><td>刷新副本并重启该实例（brew 升级后跟随）</td></tr>
+    <tr><td>同一路径并发捕获（macOS 27）</td><td><span class="tag auto">自动</span></td><td>每实例独立二进制副本路径（spike S7）；实例启动/重启串行化</td></tr>
+    <tr><td>外部 Sunshine 实例存在</td><td><span class="tag auto">自动</span></td><td>按父进程判定排除 MoonRise 全家族后清杀</td></tr>
+    <tr><td>虚拟屏被外部移除</td><td><span class="tag auto">自动</span></td><td>回调或看门狗定位槽位，仅重建该槽（停用/待删除屏不复活）</td></tr>
+    <tr><td>身份被系统记忆错误模式</td><td><span class="tag auto">自动</span></td><td>带盐身份重建一次，仍失败则回滚报错</td></tr>
+    <tr><td>销屏超时</td><td><span class="tag err">错误</span></td><td>5s 超时报错，进入诊断提示</td></tr>
+    <tr><td>实例异常退出</td><td><span class="tag auto">自动</span></td><td>退避重启（5s 起倍增，封顶 60s）</td></tr>
+    <tr><td>实例日志不可达</td><td><span class="tag hint">提示</span></td><td>串流状态按空闲显示，看门狗对账纠偏，诊断窗口提示</td></tr>
+    <tr><td>私有 API 失效</td><td><span class="tag err">错误</span></td><td>整体降级，诊断窗口提示</td></tr>
+    <tr><td>并发编码受限（视 S3 结论）</td><td><span class="tag hint">提示</span></td><td>声明同时串流上限，UI 与文档提示</td></tr>
+    <tr><td>多客户端并发输入</td><td><span class="tag hint">提示</span></td><td>不限制；共享物理光标，文档标注</td></tr>
+    <tr><td>主 conf 缺失</td><td><span class="tag hint">提示</span></td><td>引导先运行一次 Sunshine 生成</td></tr>
+  </table>
+  </div>
+</section>
+
+<footer>
+  <p>配套计划：~/.claude/plans/pasted-content-id-10e9-virtual-wreath.md · Spike 报告：Plans/multi-display-spike.md（结论已折回本设计）。</p>
+</footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<script>
+(function () {
+  var attr = document.documentElement.getAttribute('data-theme');
+  var dark = attr === 'dark' || (attr !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: dark ? 'dark' : 'neutral',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif'
+  });
+})();
+</script>

@@ -41,15 +41,15 @@ public enum DisplayList {
     }
 
     /// 创建后屏的落点判定：点宽等于像素宽（1:1 初始模式）或逻辑宽
-    /// （用户在系统设置选过 Retina 模式并已被身份记忆）都算正常；
-    /// 其它说明该身份记忆了错误模式，需要带盐重建。
+    /// （HiDPI 开启且用户在系统设置选过 Retina 模式并已被身份记忆）都算正常；
+    /// HiDPI 关闭时逻辑尺寸视为错误模式；其它说明该身份记忆了错误模式，需要带盐重建。
     public static func boundsAcceptable(_ bounds: CGRect, spec: DisplaySpec) -> Bool {
         let width = Int(bounds.width)
         let height = Int(bounds.height)
         if width == spec.width && height == spec.height {
             return true
         }
-        if spec.supportsLogicalMode && width == spec.logicalWidth && height == spec.logicalHeight {
+        if spec.hiDPI && spec.supportsLogicalMode && width == spec.logicalWidth && height == spec.logicalHeight {
             return true
         }
         return false

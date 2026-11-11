@@ -10,7 +10,9 @@
 
 把另一台 Mac（Moon）变成本机（host）的扩展屏，充分利用 Moon 的 Retina 面板（1:1 像素映射）。
 
-MoonRise 在 host 上创建一块 HiDPI 虚拟屏幕（默认 2560×1600@60，可改分辨率），自动联动官方 Sunshine 捕获串流；Moon 端 Moonlight 全屏显示，文字与原生同样锐利。Sunshine 由本 App 以子进程独占托管（退出连带停止），权限引导面板自动化完成授权。
+MoonRise 在 host 上创建 HiDPI 虚拟屏幕（默认 2560×1600@60，可改分辨率），自动联动官方 Sunshine 捕获串流；Moon 端 Moonlight 全屏显示，文字与原生同样锐利。Sunshine 由本 App 以子进程托管（退出连带停止），权限引导面板自动化完成授权。
+
+支持 1-N 块扩展屏：菜单栏 → 扩展屏幕管理… 统一管理——添加（MacBook/iPad 等预设或自定义）、逐屏分辨率/HiDPI/启用开关、删除（编号留洞）；每块屏绑定独立可连的串流实例，多台 Moonlight 客户端可同时各连一块屏。自动发现只认首实例，其余屏在 Moonlight 手动添加 `本机IP:端口`（管理窗口一键复制）；配对在 App 内完成（点「配对…」输入客户端显示的 PIN），连接后主机名与屏名一致。详见 docs/install.md 与 docs/troubleshooting.md（多屏类）。
 
 ## Clone 后快速开始
 

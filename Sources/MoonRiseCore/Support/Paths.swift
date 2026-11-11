@@ -16,6 +16,21 @@ public enum Paths {
         stateDirectory.appendingPathComponent("state.json")
     }
 
+    /// 扩展屏实例根目录：~/.config/moonrise/sunshine-instances/
+    public static var sunshineInstancesDirectory: URL {
+        home.appendingPathComponent(".config/moonrise/sunshine-instances")
+    }
+
+    /// 单个实例目录：sunshine-instances/<槽位UUID>/（conf + bin/ + credentials/）
+    public static func instanceDirectory(for slotID: UUID) -> URL {
+        sunshineInstancesDirectory.appendingPathComponent(slotID.uuidString)
+    }
+
+    /// 实例日志：~/.local/state/moonrise/sunshine-<槽位UUID前8位>.log
+    public static func instanceLogURL(for slotID: UUID) -> URL {
+        stateDirectory.appendingPathComponent("sunshine-\(slotID.uuidString.prefix(8)).log")
+    }
+
     /// 展开 ~ 前缀（配置里允许写 "~/..." 形式）。
     public static func expandTilde(_ path: String) -> String {
         guard path.hasPrefix("~") else { return path }

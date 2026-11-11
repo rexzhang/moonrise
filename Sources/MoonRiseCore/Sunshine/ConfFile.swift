@@ -60,11 +60,16 @@ public enum ConfFile {
     }
 
     /// 文件级联动：读文件 → 逐键更新 → 任一变化才写盘（先备份 .bak）。
-    /// 文件不存在视为缺失（调用方提示安装指引，不整体代建）。
-    public static func syncValues(configPath: String, values: [String: String]) throws -> EditResult {
+    /// 主 conf（createsIfMissing=false）不存在视为缺失（调用方提示安装指引）；
+    /// 实例 conf（createsIfMissing=true）为 MoonRise 自有文件，缺失时代建。
+    public static func syncValues(configPath: String, values: [String: String], createsIfMissing: Bool = false) throws -> EditResult {
         let url = URL(fileURLWithPath: Paths.expandTilde(configPath))
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw ConfFileError.configMissing(url.path)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            guard createsIfMissing else {
+                throw ConfFileError.configMissing(url.path)
+            }
+            try Paths.ensureParentDirectory(of: url)
+            try "# 由 MoonRise 管理的 Sunshine 实例配置\n".write(to: url, atomically: true, encoding: .utf8)
         }
         let text = try String(contentsOf: url, encoding: .utf8)
         var output = text

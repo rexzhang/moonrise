@@ -52,8 +52,7 @@ final class ConfFileTests: XCTestCase {
 }
 
 final class SyncValuesTests: XCTestCase {
-    func testMultiKeySyncIdempotentAndPartialChange() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    func testMultiKeySyncIdempotentAndPartialChange() throws {        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let conf = dir.appendingPathComponent("sunshine.conf")
         try "locale = zh\n".write(to: conf, atomically: true, encoding: .utf8)
@@ -76,5 +75,26 @@ final class SyncValuesTests: XCTestCase {
         // 配置缺失报错
         let missing = dir.appendingPathComponent("nope.conf")
         XCTAssertThrowsError(try ConfFile.syncValues(configPath: missing.path, values: ["k": "v"]))
+    }
+
+    func testCreatesIfMissingProvisionsInstanceConf() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let conf = dir.appendingPathComponent("sunshine.conf")
+
+        // 缺失代建：首行标注 MoonRise 管理，键全部写入
+        XCTAssertEqual(try ConfFile.syncValues(configPath: conf.path, values: ["port": "48189", "output_name": "43"], createsIfMissing: true), .changed)
+        let text = try String(contentsOf: conf, encoding: .utf8)
+        XCTAssertTrue(text.contains("MoonRise"))
+        XCTAssertTrue(text.contains("port = 48189"))
+        XCTAssertTrue(text.contains("output_name = 43"))
+
+        // 幂等
+        XCTAssertEqual(try ConfFile.syncValues(configPath: conf.path, values: ["port": "48189", "output_name": "43"], createsIfMissing: true), .unchanged)
+
+        // 单键更新保留其余内容
+        XCTAssertEqual(try ConfFile.syncValues(configPath: conf.path, values: ["port": "48289"], createsIfMissing: true), .changed)
+        let updated = try String(contentsOf: conf, encoding: .utf8)
+        XCTAssertTrue(updated.contains("port = 48289"))
+        XCTAssertTrue(updated.contains("output_name = 43"))
     }
 }

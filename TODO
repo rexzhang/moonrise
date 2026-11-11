@@ -1,0 +1,51 @@
+MoonRise:
+    ✔ 提交推送 logo 定稿资产与全部改动 @done(2026-11-07 02:22)
+    ☐ 可选: IconComposer 导出 MoonRise.icon 装入 bundle（消除 Quick Look 白圈，系统级）
+
+Quick Look 白圈（macOS 27 系统对旧式 icns 的卡片式呈现，session 不再跟踪）:
+    ✘ 消除 Quick Look 白圈 @cancelled 2026-11-07
+        系统在卡片式呈现场合为 App 图标加白色底板（所有深色图标 App 一致），图标侧无法消除；Finder 图标视图与 Dock 无白圈
+    ✘ sudo 清理惰性 TCC 残留 @cancelled 2026-11-07
+        纯美观，不做
+
+实验:
+    ✘ HEVC 串流实验 @cancelled 2026-11-07
+        Moon 端无 HEVC 硬解，不做
+
+Logo 资产文件:
+    moonrise-icon-master.png @note 1064×1064 定稿 master（透明背景，左右各 10px）
+    moonrise-icon-{1024,512,256,128}.png @note 品牌导出尺寸（README 头图用 256）
+    moonrise-fg-1044x865.png @note IconComposer 前景图层（透明双屏，1044×865）
+    moonrise-logo-source-clean.png @note 抠图版全画布记录
+    MoonRise.iconset/ @note icns 源（深墨合成版十尺寸，install-app.sh 编译 .icns）
+    重出命令 @note .venv/bin/python scripts/logo_process.py <新源图> [--logo-only]
+
+长期观察（无需行动）:
+    macOS 大版本升级 @note 私有 API 回归检查，诊断窗口点名缺失项
+    Sunshine 升级 @note brew unpin → upgrade → 菜单重启 Sunshine → brew pin
+
+多屏妥协复查（上游/环境限制所致，定期检查调整）:
+    ☐ 独立实例架构复查（每实例独立二进制副本 ~17MB × N）
+        妥协原因 Sunshine 上游单实例只钉一块屏（无 per-app 输出选择）+ macOS 27 同一路径并发捕获被串行化（spike S7，第二进程永久挂起），详见 Plans/multi-display-spike.md
+        调整方向 上游若支持单实例多屏钉屏或 macOS 取消同路径序列化 → 收回单实例架构，去除副本/多端口/多配对复杂度
+    ☐ 逐实例 PIN 配对复查
+        妥协原因 Moonlight 客户端按主机条目（IP:端口）各自建立配对，跨实例共享配对不可行（spike S2）
+        调整方向 客户端若支持证书级信任或配对迁移 → 简化为一次配对，去掉逐实例配对引导
+    ☐ 手动添加 IP:端口 主路径复查（自动发现不可用）
+        妥协原因 Moonlight 客户端 mDNS 发现按 IP 去重，同 IP 多实例只显示其一（spike S6）
+        调整方向 客户端支持同 IP 多主机后 → 管理窗口提供一键添加主机
+    ☐ 实例启动/重启串行化复查
+        妥协原因 并发编码探测互卡、后到者永久挂起（spike 实测，疑似 macOS 捕获管线行为）
+        调整方向 随独立实例架构复查一并验证，可并行后放开串行约束
+    ☐ 串流状态经日志尾随判定复查
+        妥协原因 Sunshine 无对外会话状态查询接口（上游限制）
+        调整方向 上游提供状态查询 API → 用 API 替换日志解析（StreamStateMonitor）
+    ☐ 排列引导而非自动排列复查
+        妥协原因 程序化改虚拟屏模式/排列会永久破坏销毁（AGENTS.md 硬约束，WindowServer 行为）
+        调整方向 随「长期观察 macOS 大版本升级」回归检查一并验证销毁语义与排列能力
+    ☐ PermissionPanel / DiagnosticsWindow 迁移 SwiftUI
+        妥协原因 本轮 UI 重构只迁移了改到的三窗（管理/修改/配对），两窗口仍为 AppKit（功能正常）
+        调整方向 下一轮 UI 迭代时按「UI 一律 SwiftUI」规则迁移
+    ☐ 扩展屏实例由 MoonRise 托管（与 brew services 编排不兼容）复查
+        妥协原因 brew services 仅支持单实例编排
+        调整方向 Sunshine/brew 提供多实例服务编排后可改系统托管

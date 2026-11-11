@@ -22,13 +22,14 @@ public struct RestartBackoff {
     }
 }
 
-/// 以子进程方式独占管理 Sunshine（MoonRise 为父进程）：
-/// 退出连带停止，异常退出退避重启。
+/// 以子进程方式管理一个 Sunshine 实例（MoonRise 为父进程）：
+/// 退出连带停止，异常退出退避重启；支持多实例（首屏主 conf + 扩展屏各自独立
+/// conf/二进制副本/日志——D1/D13/D16）。
 ///
 /// TCC 归属：子进程的屏幕捕获/辅助功能按"责任进程"归属 MoonRise.app，
 /// 由 scripts/make-cert.sh 生成的自签代码签名证书（MoonRiseDev）保证
 /// 跨重建稳定——ad-hoc 签名每次重建 cdhash 变化会导致授权失效。
-/// 启动走 /opt/homebrew/opt/sunshine/bin/sunshine（opt 稳定符号链接）。
+/// 主实例走 /opt/homebrew/opt/sunshine/bin/sunshine（opt 稳定符号链接）。
 public final class ChildProcessSunshineManager: SunshineManaging {
 
     public enum RunState: Equatable {
@@ -36,6 +37,9 @@ public final class ChildProcessSunshineManager: SunshineManaging {
         case running(pid: Int32)
         case crashed(retries: Int)
     }
+
+    /// 实例名（日志与诊断区分用；首屏 = "Sunshine"，扩展屏 = 屏幕显示名）
+    public let label: String
 
     private let queue = DispatchQueue(label: "com.moonrise.sunshine-child")
     private let binPath: String
@@ -47,21 +51,25 @@ public final class ChildProcessSunshineManager: SunshineManaging {
     private var startedAt: Date?
     private var isStopping = false
     private var backoff = RestartBackoff()
-    private var brewMigrationDone = false
     private var runState: RunState = .idle
 
-    public init(binPath: String, confPath: String, logURL: URL, hideTrayIcon: Bool = true) {
+    /// brew services 迁移为进程级一次性（多实例不再逐个执行）
+    private static var brewMigrationDone = false
+    private static let brewMigrationLock = NSLock()
+
+    public init(binPath: String, confPath: String, logURL: URL, hideTrayIcon: Bool = true, label: String = "Sunshine") {
         self.binPath = binPath
         self.confPath = confPath
         self.logURL = logURL
         self.hideTrayIcon = hideTrayIcon
+        self.label = label
         try? Paths.ensureParentDirectory(of: logURL)
     }
 
     // MARK: - SunshineManaging
 
     public func detect() -> SunshineInstallInfo? {
-        Self.detectBinary().map { SunshineInstallInfo(binaryPath: $0) }
+        BrewServicesSunshineManager.detectBinary().map { SunshineInstallInfo(binaryPath: $0) }
     }
 
     public func start() throws {
@@ -94,6 +102,7 @@ public final class ChildProcessSunshineManager: SunshineManaging {
             runState = .idle
             backoff.reset()
         }
+        ManagedProcessFamily.shared.remove(pid_t(victim.processIdentifier))
     }
 
     public func restart() throws {
@@ -116,27 +125,15 @@ public final class ChildProcessSunshineManager: SunshineManaging {
 
     // MARK: - 内部
 
-    public static func detectBinary() -> String? {
-        [
-            "/opt/homebrew/opt/sunshine/bin/sunshine",
-            "/opt/homebrew/bin/sunshine",
-            "/usr/local/opt/sunshine/bin/sunshine",
-            "/usr/local/bin/sunshine"
-        ].first { FileManager.default.isExecutableFile(atPath: $0) }
-    }
-
     private func startLocked() throws {
         if case .running = runState { return }  // 幂等
-        if !brewMigrationDone {
-            migrateAwayFromBrewServices()
-            brewMigrationDone = true
-        }
-        // 单实例：清掉外部实例（brew 残留 / Sunshine 保存配置时自我 fork 的孤儿）
-        let foreign = Self.findRunningSunshinePIDs(pattern: binPath)
+        Self.migrateAwayFromBrewServicesIfNeeded()
+        // 外部实例清杀：排除 MoonRise 全家族（兄弟实例同路径副本属正常形态，D16）
+        let foreign = ManagedProcessFamily.shared.foreign(from: SunshineProcessDiscovery.findCandidates())
         if !foreign.isEmpty {
-            Log.info("发现外部 Sunshine 实例 \(foreign)，终止后由本 App 接管")
+            Log.info("[\(label)] 发现外部 Sunshine 实例 \(foreign)，终止后由本 App 接管")
             for pid in foreign {
-                Self.terminate(pid: pid, graceSeconds: 3)
+                SunshineProcessDiscovery.terminate(pid: pid, graceSeconds: 3)
             }
         }
         try spawnLocked()
@@ -167,14 +164,17 @@ public final class ChildProcessSunshineManager: SunshineManaging {
         }
         try p.run()
 
+        ManagedProcessFamily.shared.add(pid_t(p.processIdentifier))
         process = p
         startedAt = spawnTime
         isStopping = false
         runState = .running(pid: p.processIdentifier)
-        Log.info("Sunshine 子进程已启动 pid=\(p.processIdentifier)")
+        Log.info("[\(label)] Sunshine 子进程已启动 pid=\(p.processIdentifier)")
     }
 
     private func handleTermination(process terminated: Process, spawnTime: Date) {
+        let terminatedPID = pid_t(terminated.processIdentifier)
+        ManagedProcessFamily.shared.remove(terminatedPID)
         queue.async { [weak self] in
             guard let self, self.process === terminated else { return }
             self.process = nil
@@ -183,7 +183,7 @@ public final class ChildProcessSunshineManager: SunshineManaging {
                 self.isStopping = false
                 self.runState = .idle
                 self.backoff.reset()
-                Log.info("Sunshine 已停止")
+                Log.info("[\(self.label)] Sunshine 已停止")
                 return
             }
 
@@ -193,19 +193,19 @@ public final class ChildProcessSunshineManager: SunshineManaging {
             }
 
             // Sunshine 保存配置时会 fork 新进程再退出旧进程——
-            // 终止孤儿并由本 App 重新拉起，保持单实例与所有权
-            let orphans = Self.findRunningSunshinePIDs(pattern: self.binPath)
+            // 终止孤儿（家族外的 sunshine 进程）并由本 App 重新拉起
+            let orphans = ManagedProcessFamily.shared.foreign(from: SunshineProcessDiscovery.findCandidates())
             if !orphans.isEmpty {
-                Log.info("Sunshine 自我 fork 检测：终止孤儿实例 \(orphans)")
+                Log.info("[\(self.label)] Sunshine 自我 fork 检测：终止孤儿实例 \(orphans)")
                 for pid in orphans {
-                    Self.terminate(pid: pid, graceSeconds: 3)
+                    SunshineProcessDiscovery.terminate(pid: pid, graceSeconds: 3)
                 }
             }
 
             let retries = self.backoff.attempt
             let delay = self.backoff.nextDelay()
             self.runState = .crashed(retries: retries)
-            Log.info("Sunshine 异常退出（code=\(terminated.terminationStatus)），\(Int(delay))s 后重启")
+            Log.info("[\(self.label)] Sunshine 异常退出（code=\(terminated.terminationStatus)），\(Int(delay))s 后重启")
             self.queue.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self, self.process == nil, !self.isStopping else { return }
                 if case .crashed = self.runState {
@@ -216,7 +216,11 @@ public final class ChildProcessSunshineManager: SunshineManaging {
     }
 
     /// 一次性迁移：解除 brew services 注册，防 brew upgrade 拉起双实例
-    private func migrateAwayFromBrewServices() {
+    private static func migrateAwayFromBrewServicesIfNeeded() {
+        brewMigrationLock.lock()
+        defer { brewMigrationLock.unlock() }
+        guard !brewMigrationDone else { return }
+        brewMigrationDone = true
         guard let brew = BrewServicesSunshineManager.detectBrew() else { return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: brew)
@@ -230,37 +234,5 @@ public final class ChildProcessSunshineManager: SunshineManaging {
         } catch {
             Log.error("brew services stop 失败：\(error.localizedDescription)")
         }
-    }
-
-    /// pgrep 找出全部运行中的 Sunshine 实例（含我们自己的子进程）
-    static func findRunningSunshinePIDs(pattern: String) -> [pid_t] {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        p.arguments = ["-f", pattern]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = FileHandle.nullDevice
-        do {
-            try p.run()
-        } catch {
-            return []
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        guard p.terminationStatus == 0 else { return [] }
-        return String(data: data, encoding: .utf8)?
-            .split(separator: "\n")
-            .compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) } ?? []
-    }
-
-    /// SIGTERM 宽限 → SIGKILL 兜底
-    static func terminate(pid: pid_t, graceSeconds: TimeInterval) {
-        guard kill(pid, SIGTERM) == 0 else { return }
-        let deadline = Date().addingTimeInterval(graceSeconds)
-        while Date() < deadline {
-            if kill(pid, 0) != 0 { return }  // 已退出
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        kill(pid, SIGKILL)
     }
 }
