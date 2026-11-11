@@ -270,11 +270,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsItem.isEnabled = !busy
         menu.addItem(settingsItem)
 
-        let permissionItem = NSMenuItem(title: "权限引导…", action: #selector(showPermissionPage(_:)), keyEquivalent: "")
-        permissionItem.target = self
-        permissionItem.isEnabled = !busy
-        menu.addItem(permissionItem)
-
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
@@ -366,11 +361,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         config.sunshine.disableAudioStreaming = disabled
         try? config.save()
         resyncAll()
-    }
-
-    /// 菜单「权限引导…」：打开设置窗口「权限」页（权限引导已整合进设置）。
-    @objc private func showPermissionPage(_ sender: NSMenuItem) {
-        showSettings(page: .permission)
     }
 
     /// 诊断页数据源：主线程快照 → 后台跑检查 → 主线程回调（设置窗口「切入即检查」）。

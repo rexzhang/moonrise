@@ -185,8 +185,8 @@ final class SettingsWindowController {
         guard contentSize.height.isFinite, contentSize.height > 0 else { return }
         let visible = primaryVisibleFrame()
         let targetWidth: CGFloat = 780
-        // 32 = 标题栏安全区 + 少量余量；上下留白一致的关键是余量不虚高
-        let targetHeight = min(max(contentSize.height + 32, 300), max(300, visible.height - 24))
+        // 72 = 标题栏 + 顶部 tab 条（分段控件，固定高度）；页面内容实测上报，余量不虚高
+        let targetHeight = min(max(contentSize.height + 72, 320), max(320, visible.height - 24))
         guard abs(targetHeight - appliedContentHeight) > 1 else { return }
         appliedContentHeight = targetHeight
         var frame = settingsWindow.frame
@@ -389,21 +389,25 @@ struct ContentSizeReporter: ViewModifier {
     }
 }
 
-// MARK: - 根视图（侧边栏 + 页面）
+// MARK: - 根视图（顶部页面 tab + 页面内容；tab 条高度计入窗口高度常量）
 
 struct SettingsRootView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $model.page) {
+        VStack(spacing: 0) {
+            Picker("", selection: $model.page) {
                 ForEach(SettingsPage.allCases) { page in
                     Label(page.title, systemImage: page.symbol).tag(page)
                 }
             }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 220)
-        } detail: {
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.large)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+
             ScrollView {
                 switch model.page {
                 case .general: GeneralPageView(model: model)
