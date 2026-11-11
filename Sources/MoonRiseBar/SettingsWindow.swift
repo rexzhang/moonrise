@@ -3,6 +3,7 @@
 // 窗口自动居中主屏、内容驱动高度（实测 + setFrame）；激活策略随窗口开关切换（.regular / .accessory）。
 
 import AppKit
+import CoreServices
 import SwiftUI
 import MoonRiseCore
 
@@ -205,6 +206,9 @@ final class SettingsWindowController {
         }
         if !anyVisible {
             NSApp.setActivationPolicy(.accessory)
+            // macOS 27 运行时切回附件不再移除 Dock 图标——用 TransformProcessType 强制 Dock 刷新
+            var psn = ProcessSerialNumber(highLongOfPSN: 0, lowLongOfPSN: UInt32(getpid()))
+            TransformProcessType(&psn, ProcessApplicationTransformState(kProcessTransformToUIElementApplication))
         }
     }
 
