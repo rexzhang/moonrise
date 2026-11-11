@@ -1,6 +1,10 @@
 MoonRise:
     ✔ 提交推送 logo 定稿资产与全部改动 @done(2026-11-07 02:22)
     ☐ 可选: IconComposer 导出 MoonRise.icon 装入 bundle（消除 Quick Look 白圈，系统级）
+    ☐ 多屏鼠标定位错误（打开另一屏 / 调整排列后 Moon 中光标偏移）
+        现象 打开另一块屏或调整排列布局后，鼠标在 Moon 中定位错误（2026-11-11 实测）
+        验证 ① 串流断开重连是否恢复 ② 重启该屏串流是否恢复 ③ 关闭「保持显示器缩放」复测；按结果定对策（候选：拓扑落定后仅重启受影响屏实例）
+        参考 Plans/ui-refresh-plan.md D12③
 
 Quick Look 白圈（macOS 27 系统对旧式 icns 的卡片式呈现，session 不再跟踪）:
     ✘ 消除 Quick Look 白圈 @cancelled 2026-11-07

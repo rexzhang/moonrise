@@ -180,11 +180,11 @@ footer { margin-top: 72px; color: var(--muted); font-size: 13px; }
   <div class="figure wide">
     <pre class="mermaid">
 flowchart LR
-    MENU["菜单栏<br/>状态聚合 + 每屏开关行"] -->|"设置…"| SET["设置窗口（侧边栏导航）<br/>通用 / 屏幕 / 诊断"]
-    MENU -->|"权限引导…"| PERM["权限引导窗口<br/>四步检查单"]
-    BOOT(["启动检测到权限缺失"]) -->|"自动弹出"| PERM
-    SET -->|"屏幕页面：添加屏幕… / 修改…"| EDIT["屏幕修改窗口<br/>（添加 / 修改双模式）"]
-    SET -->|"屏幕页面：配对…"| PAIR["配对窗口"]
+    MENU["菜单栏<br/>状态聚合 + 每屏开关行"] -->|"设置…"| SET["设置窗口（侧边栏导航）<br/>通用 / 屏幕管理 / 权限 / 诊断"]
+    MENU -->|"权限引导…"| PERM["设置窗口 · 权限页<br/>四步检查单"]
+    BOOT(["启动检测到权限缺失"]) -->|"自动打开"| PERM
+    SET -->|"屏幕管理页面：添加屏幕… / 修改…"| EDIT["屏幕修改窗口<br/>（添加 / 修改双模式）"]
+    SET -->|"屏幕管理页面：配对…"| PAIR["配对窗口"]
     EDIT -->|"成功即关窗"| SET
     </pre>
     <p class="figcap">入口关系：菜单 = 状态与快速开关；设置窗口 = 全部管理；权限引导独立</p>
@@ -233,7 +233,7 @@ flowchart TD
     <tr><td>状态聚合行</td><td>「N 屏 · 串流 M · 实例 R/T」，只读不可点；启动失败时显示错误摘要</td></tr>
     <tr><td>屏幕行</td><td>拨动开关图标（开 = 启用 / 关 = 停用）+ 名称 + 状态词（<span style="color:var(--ok)">串流中</span> / 空闲 / <span style="color:var(--muted)">未启用</span> / <span style="color:var(--warn)">离线</span>）。点击整行反转启用；失败弹错误弹框；开关图形仅作状态指示，不可单独点击</td></tr>
     <tr><td>设置…</td><td>打开设置窗口（busy 时置灰）</td></tr>
-    <tr><td>权限引导…</td><td>打开权限引导窗口</td></tr>
+    <tr><td>权限引导…</td><td>打开设置窗口「权限」页</td></tr>
     <tr><td>退出</td><td>⌘Q；退出即停全部实例并销毁全部虚拟屏（生命周期即进程）。开机自启不在菜单——在设置窗口通用页</td></tr>
   </table>
   </div>
@@ -241,17 +241,18 @@ flowchart TD
 
 <section>
   <div class="sec-head"><span class="sec-no">S3</span><h2>设置窗口框架</h2></div>
-  <p class="sec-desc">标准窗口「MoonRise 设置」，布局参考 macOS 系统设置：左侧栏导航（SF Symbols 图标 + 文字，选中项系统强调色填充：通用 / 屏幕 / 诊断）+ 右侧内容区，SwiftUI 当前推荐实现（NavigationSplitView）。内容驱动高度——页面切换与内容变化时窗口高度实时跟随并自动居中主屏；不可手动拖拽调整。打开时 App 切换为常规激活（Dock 图标 + App 菜单），关闭最后一个窗口后回到纯菜单栏形态。</p>
+  <p class="sec-desc">标准窗口「MoonRise 设置」，布局参考 macOS 系统设置：左侧栏导航（SF Symbols 图标 + 文字，选中项系统强调色填充：通用 / 屏幕管理 / 权限 / 诊断）+ 右侧内容区，SwiftUI 当前推荐实现（NavigationSplitView）。内容驱动高度——页面切换与内容变化时窗口高度实时跟随并自动居中主屏；不可手动拖拽调整。打开时 App 切换为常规激活（Dock 图标 + App 菜单），关闭最后一个窗口后回到纯菜单栏形态。</p>
   <div class="macwin" style="max-width:640px">
     <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
     <div class="split">
       <div class="sbar">
         <div class="sitem active"><span class="ic">⚙️</span>通用</div>
-        <div class="sitem"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem"><span class="ic">🖥️</span>屏幕管理</div>
+        <div class="sitem"><span class="ic">🔒</span>权限</div>
         <div class="sitem"><span class="ic">🩺</span>诊断</div>
       </div>
       <div class="scontent" style="text-align:center;color:var(--muted);font-size:12.5px;padding-block:36px">
-        页面内容区（各页详见 S4 / S5 / S9）
+        页面内容区（各页详见 S4 / S5 / S8 / S9）
       </div>
     </div>
   </div>
@@ -267,7 +268,7 @@ flowchart LR
   <div class="outer-scroll">
   <table>
     <tr><th>元素</th><th>交互</th></tr>
-    <tr><td>侧边栏导航</td><td>三项：⚙ gearshape 通用 / 🖥 rectangle.on.rectangle 屏幕 / 🩺 stethoscope 诊断（示意图形，实现用 SF Symbols）。点击切换页面，窗口高度按内容伸缩并居中；选中项系统强调色填充；记忆上次停留页（会话内）</td></tr>
+    <tr><td>侧边栏导航</td><td>四项：⚙ gearshape 通用 / 🖥 rectangle.on.rectangle 屏幕管理 / 🔒 lock.shield 权限 / 🩺 stethoscope 诊断（示意图形，实现用 SF Symbols）。点击切换页面，窗口高度按内容伸缩并居中；选中项系统强调色填充；记忆上次停留页（会话内）</td></tr>
     <tr><td>窗口形态</td><td>标准 NSWindow（激活策略切换见上图）；内容驱动高度，侧栏定宽 + 内容区设计定宽，尺寸变化后自动居中主屏可视区；styleMask 不含 .resizable（不手动拖拽调整）</td></tr>
     <tr><td>页内设计语言</td><td>整个 app 统一 macOS 27 设计语言；页内 = macOS 系统设置分组行式：通用 / 诊断页富行（图标 + 标题 + 描述 + 尾部控件 / 状态徽章），屏幕页保留卡片（内部行距与分组对齐系统行规范）</td></tr>
     <tr><td>数字规则</td><td>端口、宽、高等数字一律无千分位分组（47989 而非 47,989），全局适用</td></tr>
@@ -284,7 +285,8 @@ flowchart LR
     <div class="split">
       <div class="sbar">
         <div class="sitem active"><span class="ic">⚙️</span>通用</div>
-        <div class="sitem"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem"><span class="ic">🖥️</span>屏幕管理</div>
+        <div class="sitem"><span class="ic">🔒</span>权限</div>
         <div class="sitem"><span class="ic">🩺</span>诊断</div>
       </div>
       <div class="scontent">
@@ -325,14 +327,15 @@ flowchart LR
 </section>
 
 <section>
-  <div class="sec-head"><span class="sec-no">S5</span><h2>屏幕页面</h2></div>
+  <div class="sec-head"><span class="sec-no">S5</span><h2>屏幕管理页面</h2></div>
   <p class="sec-desc">顶部公共信息区（本机全部有效 IPv4，只展示、无复制交互，多屏共用）+「添加屏幕…」+ 每屏一张卡片：只读信息（状态胶囊 / 端口标签 / 规格行 / 同步状态）+ 内联控件。行内动作失败就地报错，保留至下次动作或 5s；停用卡片降透明；首屏不可删除。状态每秒自动刷新。</p>
   <div class="macwin" style="max-width:640px">
     <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
     <div class="split">
       <div class="sbar">
         <div class="sitem"><span class="ic">⚙️</span>通用</div>
-        <div class="sitem active"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem active"><span class="ic">🖥️</span>屏幕管理</div>
+        <div class="sitem"><span class="ic">🔒</span>权限</div>
         <div class="sitem"><span class="ic">🩺</span>诊断</div>
       </div>
       <div class="scontent">
@@ -410,7 +413,7 @@ flowchart TD
 
 <section>
   <div class="sec-head"><span class="sec-no">S6</span><h2>屏幕修改窗口</h2></div>
-  <p class="sec-desc">逐屏独立窗口（添加 / 修改双模式），SwiftUI 默认控件风格。预设下拉按分组（MacBook / iPad / Apple 显示器 / 通用）选中即填充宽/高/刷新率与 HiDPI；预设项的文字「HiDPI」标记表示选中后 HiDPI 开关自动为开；再手改字段不回弹选择器。删除不在本窗口——在屏幕页面的卡片上。</p>
+  <p class="sec-desc">逐屏独立窗口（添加 / 修改双模式），SwiftUI 默认控件风格。预设下拉按分组（MacBook / iPad / Apple 显示器 / 通用）选中即填充宽/高/刷新率与 HiDPI；预设项的文字「HiDPI」标记表示选中后 HiDPI 开关自动为开；再手改字段不回弹选择器。删除不在本窗口——在屏幕管理页面的卡片上。</p>
   <div class="macwin" style="max-width:430px">
     <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>修改屏幕 — Moon 2</div>
     <div class="wbody">
@@ -482,11 +485,18 @@ flowchart TD
 </section>
 
 <section>
-  <div class="sec-head"><span class="sec-no">S8</span><h2>权限引导窗口</h2></div>
-  <p class="sec-desc">四步检查单：屏幕捕获、输入控制、Sunshine 进程、编码器探测。每行状态徽章 + 就地动作；1s 轮询刷新，授权完成后自动重启全部实例。权限对象是 MoonRise（Sunshine 以子进程运行，macOS 按责任进程向 MoonRise 收权限）。启动时检测到权限缺失自动弹出。</p>
-  <div class="macwin" style="max-width:520px">
-    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>权限引导</div>
-    <div class="wbody">
+  <div class="sec-head"><span class="sec-no">S8</span><h2>权限页面</h2></div>
+  <p class="sec-desc">设置窗口「权限」页（原独立权限引导窗口并入）：四步检查单——屏幕捕获、输入控制、Sunshine 进程、编码器探测。每行状态徽章 + 就地动作；每秒刷新，授权完成后自动重启全部实例。权限对象是 MoonRise（Sunshine 以子进程运行，macOS 按责任进程向 MoonRise 收权限）。启动时检测到权限缺失自动打开设置到本页；菜单「权限引导…」也指向本页。</p>
+  <div class="macwin" style="max-width:640px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
+    <div class="split">
+      <div class="sbar">
+        <div class="sitem"><span class="ic">⚙️</span>通用</div>
+        <div class="sitem"><span class="ic">🖥️</span>屏幕管理</div>
+        <div class="sitem active"><span class="ic">🔒</span>权限</div>
+        <div class="sitem"><span class="ic">🩺</span>诊断</div>
+      </div>
+      <div class="scontent">
       <div class="checkrow">
         <span class="badge ok">✓</span><span class="cr-label">屏幕捕获（MoonRise）— 已授予</span>
       </div>
@@ -502,14 +512,15 @@ flowchart TD
         <span class="cr-actions"><span class="btn">重启 Sunshine</span></span>
       </div>
       <p style="font-size:12.5px;color:var(--muted);margin:12px 0 0">
-        ② 输入控制：点「请求输入控制授权」→ 系统设置中打开 MoonRise 开关（Moon 端键鼠控制需要）。完成后本面板数秒内自动变绿，Sunshine 会自动重启。
+        ② 输入控制：点「请求输入控制授权」→ 系统设置中打开 MoonRise 开关（Moon 端键鼠控制需要）。完成后本页数秒内自动变绿，Sunshine 会自动重启。
       </p>
+      </div>
     </div>
   </div>
   <div class="figure wide">
     <pre class="mermaid">
 flowchart TD
-    A(["打开（菜单 或 启动自动弹出）"]) --> B["渲染四步检查单（1s 刷新）<br/>捕获 / 输入控制 / Sunshine 进程 / 编码器探测"]
+    A(["切入权限页（菜单「权限引导…」或 启动自动打开）"]) --> B["渲染四步检查单（每秒刷新）<br/>捕获 / 输入控制 / Sunshine 进程 / 编码器探测"]
     B --> C{"捕获或输入未授予？"}
     C -->|是| D["行内指引 + 就地动作<br/>请求授权 / 打开系统设置"]
     D --> E["授权完成（轮询感知）"]
@@ -532,7 +543,8 @@ flowchart TD
     <div class="split">
       <div class="sbar">
         <div class="sitem"><span class="ic">⚙️</span>通用</div>
-        <div class="sitem"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem"><span class="ic">🖥️</span>屏幕管理</div>
+        <div class="sitem"><span class="ic">🔒</span>权限</div>
         <div class="sitem active"><span class="ic">🩺</span>诊断</div>
       </div>
       <div class="scontent">

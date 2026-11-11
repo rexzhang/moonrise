@@ -11,6 +11,7 @@ import MoonRiseCore
 enum SettingsPage: String, CaseIterable, Identifiable {
     case general
     case screens
+    case permission
     case diagnostics
 
     var id: String { rawValue }
@@ -18,7 +19,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "通用"
-        case .screens: return "屏幕"
+        case .screens: return "屏幕管理"
+        case .permission: return "权限"
         case .diagnostics: return "诊断"
         }
     }
@@ -27,6 +29,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape"
         case .screens: return "rectangle.on.rectangle"
+        case .permission: return "lock.shield"
         case .diagnostics: return "stethoscope"
         }
     }
@@ -48,11 +51,25 @@ struct ScreenCallbacks {
     var setLoginItem: ((Bool) -> Void)?
     var restartAllInstances: (() -> Void)?
     var resyncAll: (() -> Void)?
+    var requestCapturePermission: (() -> Void)?
+    var requestInputControlPermission: (() -> Void)?
+    var openCaptureSystemSettings: (() -> Void)?
+    var restartPrimarySunshine: (() -> Void)?
+}
+
+/// 权限页状态快照（主线程每秒采集）。
+struct PermissionStatusSnapshot {
+    let captureGranted: Bool
+    let inputGranted: Bool
+    let sunshineRunning: Bool
+    let sunshineStatusLine: String
+    let probeOK: Bool
 }
 
 // MARK: - 状态模型
 
 final class SettingsModel: ObservableObject {
+    @Published var page: SettingsPage = .screens
     @Published var displays: [DisplayConfig] = []
     @Published var summaries: [AppController.ScreenSummary] = []
     @Published var keepHostScaling = true
@@ -63,6 +80,8 @@ final class SettingsModel: ObservableObject {
     var callbacks = ScreenCallbacks()
     /// 诊断页数据源：主线程快照 → 后台检查 → 主线程回调（AppController 提供）。
     var diagnosticsProvider: ((@escaping ([DiagnosticsModel.CheckRow]) -> Void) -> Void)?
+    /// 权限页数据源（AppController 提供，主线程采集）。
+    var permissionProvider: (() -> PermissionStatusSnapshot?)?
     /// 页面内容实测尺寸回调（驱动窗口高度 + 居中）。
     var onContentSizeChanged: ((CGSize) -> Void)?
 
@@ -139,8 +158,12 @@ final class SettingsWindowController {
         // 最后一个 MoonRise 窗口关闭 → 回到纯菜单栏形态（.accessory）。
         observers.append(NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.updateActivationPolicy()
+        ) { [weak self] note in
+            guard let closing = note.object as? NSWindow else { return }
+            // willClose 时窗口仍标记可见——异步等关闭完成后检查
+            DispatchQueue.main.async {
+                self?.updateActivationPolicy(excluding: closing)
+            }
         })
     }
 
@@ -148,7 +171,10 @@ final class SettingsWindowController {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
-    func showSettings() {
+    func showSettings(page: SettingsPage? = nil) {
+        if let page {
+            model.page = page
+        }
         NSApp.setActivationPolicy(.regular)
         settingsWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -159,7 +185,8 @@ final class SettingsWindowController {
         guard contentSize.height.isFinite, contentSize.height > 0 else { return }
         let visible = primaryVisibleFrame()
         let targetWidth: CGFloat = 780
-        let targetHeight = min(max(contentSize.height + 64, 420), max(420, visible.height - 24))
+        // 32 = 标题栏安全区 + 少量余量；上下留白一致的关键是余量不虚高
+        let targetHeight = min(max(contentSize.height + 32, 300), max(300, visible.height - 24))
         guard abs(targetHeight - appliedContentHeight) > 1 else { return }
         appliedContentHeight = targetHeight
         var frame = settingsWindow.frame
@@ -170,9 +197,11 @@ final class SettingsWindowController {
     }
 
     /// 任一 MoonRise 窗口可见期间保持常规 App 形态，全部关闭后回到纯菜单栏形态。
-    private func updateActivationPolicy() {
+    private func updateActivationPolicy(excluding closing: NSWindow? = nil) {
         let anyVisible = NSApp.windows.contains { window in
-            window.isVisible && window.identifier?.rawValue.hasPrefix("moonrise.") == true
+            window !== closing
+                && window.isVisible
+                && window.identifier?.rawValue.hasPrefix("moonrise.") == true
         }
         if !anyVisible {
             NSApp.setActivationPolicy(.accessory)
@@ -364,11 +393,10 @@ struct ContentSizeReporter: ViewModifier {
 
 struct SettingsRootView: View {
     @ObservedObject var model: SettingsModel
-    @State private var page: SettingsPage = .screens
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $page) {
+            List(selection: $model.page) {
                 ForEach(SettingsPage.allCases) { page in
                     Label(page.title, systemImage: page.symbol).tag(page)
                 }
@@ -377,9 +405,10 @@ struct SettingsRootView: View {
             .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 220)
         } detail: {
             ScrollView {
-                switch page {
+                switch model.page {
                 case .general: GeneralPageView(model: model)
                 case .screens: ScreensPageView(model: model)
+                case .permission: PermissionPageView(model: model)
                 case .diagnostics: DiagnosticsPageView(model: model)
                 }
             }
@@ -725,5 +754,94 @@ struct DiagnosticsPageView: View {
             rows = result
             loading = false
         }
+    }
+}
+
+// MARK: - 权限页面
+
+struct PermissionPageView: View {
+    @ObservedObject var model: SettingsModel
+    @State private var snapshot = PermissionStatusSnapshot(
+        captureGranted: false, inputGranted: false,
+        sunshineRunning: false, sunshineStatusLine: "", probeOK: false)
+    private let heartbeat = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: 0) {
+                RichRow(symbol: "lock.shield",
+                        title: "屏幕捕获（MoonRise）",
+                        detail: snapshot.captureGranted
+                            ? "已授予（全部实例共用该归属）"
+                            : "未授予——允许系统弹窗，或在系统设置打开 MoonRise 开关") {
+                    if !snapshot.captureGranted {
+                        Button("请求屏幕捕获授权") { model.callbacks.requestCapturePermission?() }
+                        Button("打开系统设置") { model.callbacks.openCaptureSystemSettings?() }
+                    }
+                }
+                Divider()
+                RichRow(symbol: "keyboard",
+                        title: "输入控制（MoonRise）",
+                        detail: snapshot.inputGranted
+                            ? "已授予"
+                            : "未授予——Moon 端键鼠控制需要；系统设置打开 MoonRise 开关") {
+                    if !snapshot.inputGranted {
+                        Button("请求输入控制授权") { model.callbacks.requestInputControlPermission?() }
+                        Button("打开系统设置") { model.callbacks.openCaptureSystemSettings?() }
+                    }
+                }
+                Divider()
+                RichRow(symbol: "bolt.horizontal",
+                        title: "Sunshine 进程",
+                        detail: snapshot.sunshineStatusLine) {}
+                Divider()
+                RichRow(symbol: "video",
+                        title: "编码器探测",
+                        detail: snapshot.probeOK
+                            ? "捕获就绪，VideoToolbox 硬件编码器就绪"
+                            : "未通过（需要权限或重启）") {
+                    if !snapshot.probeOK {
+                        Button("重启 Sunshine") { model.callbacks.restartPrimarySunshine?() }
+                    }
+                }
+            }
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.08)))
+
+            Text(guidance)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .modifier(ContentSizeReporter { size in model.onContentSizeChanged?(size) })
+        .onAppear { refresh() }
+        .onReceive(heartbeat) { _ in refresh() }
+    }
+
+    private func refresh() {
+        if let snapshot = model.permissionProvider?() {
+            self.snapshot = snapshot
+        }
+    }
+
+    private var guidance: String {
+        if !snapshot.captureGranted || !snapshot.inputGranted {
+            var steps = "权限对象是 MoonRise（Sunshine 以子进程运行，macOS 按责任进程向 MoonRise 收权限；给 sunshine 二进制授权无效）。"
+            if !snapshot.captureGranted {
+                steps += " ① 屏幕捕获：点「请求屏幕捕获授权」→ 弹窗点「允许」。"
+            }
+            if !snapshot.inputGranted {
+                steps += " ② 输入控制：点「请求输入控制授权」→ 系统设置中打开 MoonRise 开关（Moon 端键鼠控制需要）。"
+            }
+            steps += " 完成后本页数秒内自动变绿，Sunshine 会自动重启。"
+            return steps
+        }
+        if !snapshot.probeOK {
+            return "权限已全部授予 ✓。Sunshine 需要重启以重跑编码器探测：点「重启 Sunshine」。（授权翻转时通常已自动完成）"
+        }
+        return "全部就绪 ✓：可在 Moon 端 Moonlight 全屏连接本机，验证扩展屏。"
     }
 }

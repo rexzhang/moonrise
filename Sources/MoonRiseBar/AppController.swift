@@ -42,7 +42,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var watchdog: Timer?
     private var lastCapturePermission: Bool?
     private var restartedSunshineAfterGrant = false
-    private var permissionPanel: PermissionPanel?
 
     // MARK: - 生命周期
 
@@ -90,11 +89,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.orchestrator = orchestrator
 
                 self.registerReconfigurationCallback()
-                // 权限引导：屏幕捕获或输入控制缺失时自动打开面板
+                // 权限引导：屏幕捕获或输入控制缺失时自动打开设置窗口「权限」页
                 self.lastCapturePermission = CapturePermission.granted
                 if !CapturePermission.granted || !CapturePermission.inputControlGranted {
-                    DispatchQueue.main.async { self.showPermissionPanel() }
-                    Log.info("屏幕捕获/输入控制权限缺失：已自动打开权限引导面板")
+                    DispatchQueue.main.async { self.showSettings(page: .permission) }
+                    Log.info("屏幕捕获/输入控制权限缺失：已打开设置窗口权限页")
                 }
                 if self.config.keepHostScaling {
                     HostDisplayModeKeeper.snapshot()   // Moon 建屏前记录 host 显示模式基线
@@ -271,7 +270,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsItem.isEnabled = !busy
         menu.addItem(settingsItem)
 
-        let permissionItem = NSMenuItem(title: "权限引导…", action: #selector(showPermissionPanel), keyEquivalent: "")
+        let permissionItem = NSMenuItem(title: "权限引导…", action: #selector(showPermissionPage(_:)), keyEquivalent: "")
         permissionItem.target = self
         permissionItem.isEnabled = !busy
         menu.addItem(permissionItem)
@@ -369,18 +368,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resyncAll()
     }
 
-    @objc private func showPermissionPanel() {
-        if permissionPanel == nil {
-            permissionPanel = PermissionPanel()
-        }
-        permissionPanel?.present(context: PermissionPanel.Context(
-            manager: sunshineManager,
-            sunshineLogPath: Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path,
-            restartSunshine: { [weak self] in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    try? self?.sunshineManager.restart()
-                }
-            }))
+    /// 菜单「权限引导…」：打开设置窗口「权限」页（权限引导已整合进设置）。
+    @objc private func showPermissionPage(_ sender: NSMenuItem) {
+        showSettings(page: .permission)
     }
 
     /// 诊断页数据源：主线程快照 → 后台跑检查 → 主线程回调（设置窗口「切入即检查」）。
@@ -427,10 +417,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - 扩展屏幕管理（SwiftUI 三窗：列表 / 修改 / 配对）
 
-    private func showSettings() {
+    private func showSettings(page: SettingsPage? = nil) {
         wireScreenCallbacks()
         refreshScreenModel()
-        SettingsWindowController.shared.showSettings()
+        SettingsWindowController.shared.showSettings(page: page)
     }
 
     private func refreshScreenModel() {
@@ -474,9 +464,32 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setDisableAudioStreaming: { [weak self] disabled in self?.toggleAudioStreaming(disabled: disabled) },
             setLoginItem: { [weak self] enabled in self?.setLoginItem(enabled) },
             restartAllInstances: { [weak self] in self?.restartAllInstances() },
-            resyncAll: { [weak self] in self?.resyncAll() })
+            resyncAll: { [weak self] in self?.resyncAll() },
+            requestCapturePermission: { CapturePermission.request() },
+            requestInputControlPermission: { CapturePermission.requestInputControl() },
+            openCaptureSystemSettings: {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.settings.privacy?Privacy_ScreenCapture") {
+                    NSWorkspace.shared.open(url)
+                }
+            },
+            restartPrimarySunshine: { [weak self] in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    try? self?.sunshineManager.restart()
+                }
+            })
         model.diagnosticsProvider = { [weak self] completion in
             self?.runDiagnostics(completion: completion)
+        }
+        model.permissionProvider = { [weak self] in
+            guard let self else { return nil }
+            let sunshine = self.sunshineManager.statusLine()
+            return PermissionStatusSnapshot(
+                captureGranted: CapturePermission.granted,
+                inputGranted: CapturePermission.inputControlGranted,
+                sunshineRunning: sunshine.hasPrefix("运行中"),
+                sunshineStatusLine: sunshine,
+                probeOK: DiagnosticsModel.sunshineProbeGranted(
+                    logPath: Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path))
         }
     }
 

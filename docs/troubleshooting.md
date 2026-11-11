@@ -4,7 +4,7 @@
 
 ## 权限类
 
-- Sunshine 报无权限 / 编码器探测失败：权限引导面板会实时显示 MoonRise 的屏幕捕获与输入控制状态；完成授权后点「重启 Sunshine」重跑编码器探测（授权翻转时也会自动重启）。
+- Sunshine 报无权限 / 编码器探测失败：设置「权限」页会实时显示 MoonRise 的屏幕捕获与输入控制状态；完成授权后点「重启 Sunshine」重跑编码器探测（授权翻转时也会自动重启）。
 - 系统设置列表里看不到 MoonRise 条目：点面板「请求屏幕捕获授权」后在弹窗里点「允许」（不要只点“打开系统设置”）；仍不行就手动添加 /Applications/MoonRise.app。
 - 每次重建后权限失效：说明安装时用了 ad-hoc 签名——运行 bash scripts/make-cert.sh --trust 后重新 install-app.sh（签名阶梯见 docs/development.md）。
 - 键鼠在 Moon 端不动：输入控制（辅助功能）权限未授予 MoonRise，面板一键请求后即可。

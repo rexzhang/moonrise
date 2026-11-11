@@ -7,7 +7,7 @@ MoonRise 在 host（本机 Mac）上用 CoreGraphics 私有 API 创建 HiDPI 虚
 ```mermaid
 flowchart LR
     subgraph host["host（Mac）"]
-        app["MoonRise.app<br/>（菜单栏：状态 + 每屏开关；设置窗口：通用/屏幕/诊断）"]
+        app["MoonRise.app<br/>（菜单栏：状态 + 每屏开关；设置窗口：通用/屏幕管理/权限/诊断）"]
         s1["虚拟屏 Moon 1<br/>2560×1600 HiDPI@60"]
         s2["虚拟屏 Moon N<br/>（逐屏规格）"]
         main["Sunshine 主实例<br/>（首屏，brew，不改源码）"]
