@@ -121,7 +121,7 @@ final class SettingsModel: ObservableObject {
 
 // MARK: - 宿主窗口
 
-final class SettingsWindowController {
+final class SettingsWindowController: NSObject, NSToolbarDelegate {
     static let shared = SettingsWindowController()
     let model = SettingsModel()
     private let settingsWindow: NSWindow
@@ -129,8 +129,9 @@ final class SettingsWindowController {
     private var pairingWindows: [UUID: NSWindow] = [:]
     private var observers: [NSObjectProtocol] = []
     private var appliedContentHeight: CGFloat = 0
+    private var pageItems: [SettingsPage: NSToolbarItem] = [:]
 
-    init() {
+    override init() {
         settingsWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 780, height: 420),
             styleMask: [.titled, .closable],
@@ -139,6 +140,10 @@ final class SettingsWindowController {
         settingsWindow.identifier = NSUserInterfaceItemIdentifier("moonrise.settings")
         settingsWindow.isReleasedWhenClosed = false
         settingsWindow.backgroundColor = NSColor.windowBackgroundColor
+        super.init()
+        // 页面 tab 在窗口顶部工具栏（macOS 偏好设置窗口惯例）
+        settingsWindow.toolbar = makeToolbar()
+        settingsWindow.toolbarStyle = .preference
         let hosting = NSHostingController(rootView: SettingsRootView(model: model))
         hosting.sizingOptions = []
         // 用 contentView 挂载（不用 contentViewController——后者会让窗口采用
@@ -176,9 +181,78 @@ final class SettingsWindowController {
         if let page {
             model.page = page
         }
+        syncToolbarSelection()
         NSApp.setActivationPolicy(.regular)
         settingsWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func makeToolbar() -> NSToolbar {
+        let toolbar = NSToolbar(identifier: "moonrise.settings.toolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        return toolbar
+    }
+
+    // MARK: - NSToolbarDelegate（顶部页面 tab：独立 item，选中 = 强调色图标）
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace] + SettingsPage.allCases.map { tabIdentifier($0) } + [.flexibleSpace]
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace] + SettingsPage.allCases.map { tabIdentifier($0) } + [.flexibleSpace]
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        guard let page = page(for: itemIdentifier) else { return nil }
+        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+        item.label = page.title
+        item.paletteLabel = page.title
+        item.target = self
+        item.action = #selector(pageTabClicked(_:))
+        item.image = tabImage(for: page, selected: page == model.page)
+        pageItems[page] = item
+        return item
+    }
+
+    private func tabIdentifier(_ page: SettingsPage) -> NSToolbarItem.Identifier {
+        NSToolbarItem.Identifier("moonrise.tab.\(page.rawValue)")
+    }
+
+    private func page(for identifier: NSToolbarItem.Identifier) -> SettingsPage? {
+        SettingsPage.allCases.first { tabIdentifier($0) == identifier }
+    }
+
+    /// 选中页图标 = 强调色（部分页面用 fill 变体强化），其余 = 次要色。
+    private func tabImage(for page: SettingsPage, selected: Bool) -> NSImage? {
+        let symbolName: String
+        switch page {
+        case .general: symbolName = selected ? "gearshape.fill" : "gearshape"
+        case .screens: symbolName = selected ? "rectangle.on.rectangle.fill" : "rectangle.on.rectangle"
+        case .permission: symbolName = selected ? "lock.shield.fill" : "lock.shield"
+        case .diagnostics: symbolName = "stethoscope"
+        }
+        let color = selected ? NSColor.controlAccentColor : NSColor.secondaryLabelColor
+        return NSImage(systemSymbolName: symbolName, accessibilityDescription: page.title)?
+            .withSymbolConfiguration(.init(paletteColors: [color]))
+    }
+
+    /// 页面来源变化（外部切页 / tab 点击）时同步图标选中态。
+    private func syncToolbarSelection() {
+        for (page, item) in pageItems {
+            item.image = tabImage(for: page, selected: page == model.page)
+        }
+    }
+
+    /// 顶部 tab 点击 → 切页。
+    @objc private func pageTabClicked(_ sender: NSToolbarItem) {
+        guard let page = page(for: sender.itemIdentifier) else { return }
+        model.page = page
+        syncToolbarSelection()
     }
 
     /// 窗口尺寸 = 设计定宽 + 实测内容高度（+ 标题栏与页面边距），钳制后设框并居中主屏。
@@ -186,8 +260,8 @@ final class SettingsWindowController {
         guard contentSize.height.isFinite, contentSize.height > 0 else { return }
         let visible = primaryVisibleFrame()
         let targetWidth: CGFloat = 780
-        // 72 = 标题栏 + 顶部 tab 条（分段控件，固定高度）；页面内容实测上报，余量不虚高
-        let targetHeight = min(max(contentSize.height + 72, 320), max(320, visible.height - 24))
+        // 64 = 标题栏 + 偏好式工具栏 tab（图标 + 下置标签）；页面内容实测上报，余量不虚高
+        let targetHeight = min(max(contentSize.height + 64, 320), max(320, visible.height - 24))
         guard abs(targetHeight - appliedContentHeight) > 1 else { return }
         appliedContentHeight = targetHeight
         var frame = settingsWindow.frame
@@ -393,51 +467,18 @@ struct ContentSizeReporter: ViewModifier {
     }
 }
 
-// MARK: - 根视图（顶部页面 tab + 页面内容；tab 条高度计入窗口高度常量）
+// MARK: - 根视图（顶部 tab 由 NSToolbar 承载，此处按页分发内容）
 
 struct SettingsRootView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
-        if #available(macOS 15.0, *) {
-            // macOS 26+ 渲染为窗口顶部工具栏式 tab（图标 + 文字）
-            TabView(selection: $model.page) {
-                Tab("通用", systemImage: "gearshape", value: .general) {
-                    GeneralPageView(model: model)
-                }
-                Tab("屏幕管理", systemImage: "rectangle.on.rectangle", value: .screens) {
-                    ScreensPageView(model: model)
-                }
-                Tab("权限", systemImage: "lock.shield", value: .permission) {
-                    PermissionPageView(model: model)
-                }
-                Tab("诊断", systemImage: "stethoscope", value: .diagnostics) {
-                    DiagnosticsPageView(model: model)
-                }
-            }
-        } else {
-            // 旧系统回退：分段控件（不渲染图标，仅文字）
-            VStack(spacing: 0) {
-                Picker("", selection: $model.page) {
-                    ForEach(SettingsPage.allCases) { page in
-                        Label(page.title, systemImage: page.symbol).tag(page)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.large)
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
-
-                ScrollView {
-                    switch model.page {
-                    case .general: GeneralPageView(model: model)
-                    case .screens: ScreensPageView(model: model)
-                    case .permission: PermissionPageView(model: model)
-                    case .diagnostics: DiagnosticsPageView(model: model)
-                    }
-                }
+        ScrollView {
+            switch model.page {
+            case .general: GeneralPageView(model: model)
+            case .screens: ScreensPageView(model: model)
+            case .permission: PermissionPageView(model: model)
+            case .diagnostics: DiagnosticsPageView(model: model)
             }
         }
     }

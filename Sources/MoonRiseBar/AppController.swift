@@ -246,7 +246,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
         menu.addItem(statusMenuItem())
 
-        // 每屏一行：拨动开关图标反映启用态，点击整行反转（D2）
+        // 每屏一行：状态图标反映屏幕状态（串流中/空闲/未启用/离线），点击整行反转启用（D2）
         for summary in screenSummaries() {
             let item = NSMenuItem(
                 title: "\(summary.name) · \(summary.state.label)",
@@ -255,11 +255,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.target = self
             item.representedObject = summary.slotID.uuidString
             item.isEnabled = !busy
-            // SF Symbol 无 toggleon/toggleoff，用 switch.2 同形不同色表达开关态
-            if let symbol = NSImage(systemSymbolName: "switch.2",
-                                    accessibilityDescription: summary.enabled ? "已启用" : "已停用") {
-                let color = summary.enabled ? NSColor.systemGreen : NSColor.secondaryLabelColor
-                item.image = symbol.withSymbolConfiguration(.init(paletteColors: [color]))
+            // 状态图标：串流中 = 绿实心播放圈；空闲 = 灰圈；未启用 = 灰虚线圈；离线 = 橙警示圈
+            let icon: (symbol: String, color: NSColor)
+            switch summary.state {
+            case .streaming: icon = ("play.circle.fill", .systemGreen)
+            case .idle: icon = ("circle", .secondaryLabelColor)
+            case .disabled: icon = ("circle.dashed", .secondaryLabelColor)
+            case .offline: icon = ("exclamationmark.circle.fill", .systemOrange)
+            }
+            if let symbol = NSImage(systemSymbolName: icon.symbol,
+                                    accessibilityDescription: summary.state.label) {
+                item.image = symbol.withSymbolConfiguration(.init(paletteColors: [icon.color]))
             }
             menu.addItem(item)
         }
