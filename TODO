@@ -43,9 +43,8 @@ Logo 资产文件:
     ☐ 排列引导而非自动排列复查
         妥协原因 程序化改虚拟屏模式/排列会永久破坏销毁（AGENTS.md 硬约束，WindowServer 行为）
         调整方向 随「长期观察 macOS 大版本升级」回归检查一并验证销毁语义与排列能力
-    ☐ PermissionPanel / DiagnosticsWindow 迁移 SwiftUI
-        妥协原因 本轮 UI 重构只迁移了改到的三窗（管理/修改/配对），两窗口仍为 AppKit（功能正常）
-        调整方向 下一轮 UI 迭代时按「UI 一律 SwiftUI」规则迁移
+    ✔ PermissionPanel / DiagnosticsWindow 迁移 SwiftUI @done(26-11-11 20:30)
+        两窗口已随设置窗口重构 SwiftUI 化：权限引导为四步检查单窗口，诊断并入设置窗口诊断页（检查逻辑迁 DiagnosticsModel）
     ☐ 扩展屏实例由 MoonRise 托管（与 brew services 编排不兼容）复查
         妥协原因 brew services 仅支持单实例编排
         调整方向 Sunshine/brew 提供多实例服务编排后可改系统托管

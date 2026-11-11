@@ -1,5 +1,5 @@
-// ScreenEditWindow.swift — 屏幕修改窗口（W2，SwiftUI）：修改 / 添加双模式。
-// 预设下拉（分组，自带 HiDPI 标记）联动填充；应用 = 校验 → rebuild / create；无删除（在 W1）。
+// ScreenEditWindow.swift — 屏幕修改窗口（SwiftUI）：修改 / 添加双模式。
+// 预设下拉（分组，HiDPI 标记为文字）联动填充；应用 = 校验 → rebuild / create；无删除（在设置窗口屏幕页）。
 
 import AppKit
 import SwiftUI
@@ -156,7 +156,7 @@ struct ScreenEditView: View {
     }
 
     private func presetTag(_ preset: DisplayPreset) -> some View {
-        Text("\(preset.name)  \(preset.width)×\(preset.height)\(preset.hiDPI ? " · HiDPI ✓" : "")")
+        Text("\(preset.name)  \(preset.width)×\(preset.height)\(preset.hiDPI ? " · HiDPI" : "")")
             .tag(preset.id)
     }
 

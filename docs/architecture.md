@@ -7,7 +7,7 @@ MoonRise 在 host（本机 Mac）上用 CoreGraphics 私有 API 创建 HiDPI 虚
 ```mermaid
 flowchart LR
     subgraph host["host（Mac）"]
-        app["MoonRise.app<br/>（菜单栏：状态显示；统一管理窗口）"]
+        app["MoonRise.app<br/>（菜单栏：状态 + 每屏开关；设置窗口：通用/屏幕/诊断）"]
         s1["虚拟屏 Moon 1<br/>2560×1600 HiDPI@60"]
         s2["虚拟屏 Moon N<br/>（逐屏规格）"]
         main["Sunshine 主实例<br/>（首屏，brew，不改源码）"]
@@ -38,8 +38,8 @@ flowchart LR
 - 音频不处理：全局「禁用音频串流」写主 conf 与全部实例 conf；host 本地照常出声。
 - Sunshine 托管：首屏 managed 模式（opt 稳定路径子进程独占运行，退出连带停止，异常退避重启，孤儿接管，首次解除 brew services 注册，托盘隐藏）；扩展屏实例一律 MoonRise 托管、端口 48089 起步进 100 冻结；实例启动/重启串行化。
 - 外部实例清杀按进程归属判定（ppid + 托管家族集合），绝不按二进制路径——扩展屏副本与源同内容属正常形态。
-- 串流状态：逐实例日志尾随（log_path 分流）识别会话开始/结束，菜单栏每屏一行显示 ● 串流中 / ○ 空闲 / ○ 未启用 / ▲ 离线；看门狗 30s 对账兜底。
-- 客户端发现：Moonlight 按 IP 去重，自动发现只认首实例——扩展屏以手动添加 IP:端口 为主路径（管理窗口一键复制）；逐实例 PIN 配对（共享 CA 不免配对，spike S2 实测）。
+- 串流状态：逐实例日志尾随（log_path 分流）识别会话开始/结束，菜单栏每屏一行显示开关图标与状态词（串流中 / 空闲 / 未启用 / 离线）；看门狗 30s 对账兜底。
+- 客户端发现：Moonlight 按 IP 去重，自动发现只认首实例——扩展屏以手动添加 IP:端口 为主路径（本机 IP 集中显示在设置屏幕页顶部）；逐实例 PIN 配对（共享 CA 不免配对，spike S2 实测）。
 
 ## 配对与凭据持久化
 

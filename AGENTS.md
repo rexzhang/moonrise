@@ -4,7 +4,7 @@
 
 ## 语言
 
-文档、代码注释、提交信息一律中文。提交信息用 Conventional Commits：type 用英文标准词（feat/fix/refactor/chore/docs/test/perf），描述用中文。本项目覆盖"提交信息用英文"的任何全局约定。文档中的流程图一律用 Mermaid 绘制。UI 一律 SwiftUI（系统默认控件风格，不做自定义皮肤；新 UI 不再新增 AppKit 视图——NSStatusItem/NSMenu 宿主与 NSHostingController 承载除外），存量 AppKit 视图（PermissionPanel/DiagnosticsWindow）迁移见 TODO。
+文档、代码注释、提交信息一律中文。提交信息用 Conventional Commits：type 用英文标准词（feat/fix/refactor/chore/docs/test/perf），描述用中文。本项目覆盖"提交信息用英文"的任何全局约定。文档中的流程图一律用 Mermaid 绘制。UI 一律 SwiftUI（整个 app 统一 macOS 27 设计语言：系统默认控件 + 当前推荐 API/样式，不做自定义皮肤；新 UI 不再新增 AppKit 视图——NSStatusItem/NSMenu 宿主与 NSHostingController 承载除外）。
 
 ## 项目一句话
 
@@ -28,6 +28,6 @@ MoonRise：菜单栏 App 用 CGVirtualDisplay 私有 API 创建 HiDPI 虚拟屏�
 
 ## 验证
 
-swift build && swift test（66 个单测：身份向量、conf 编辑、规格校验、边界判定、配置迁移、收敛计划、预设、实例键集/端口/副本、家族判定、串流标记状态机）。UI 行为用菜单栏 → 诊断…（逐屏）与屏幕管理窗口核对（含捕获权限日志推断）。
+swift build && swift test（69 个单测：身份向量、conf 编辑、规格校验、边界判定、配置迁移、收敛计划、预设、实例键集/端口/副本、家族判定、串流标记状态机、主 conf 键集）。UI 行为用菜单栏每屏开关、设置窗口（通用 / 屏幕 / 诊断页）核对（含捕获权限日志推断）。
 
 构建与错误处理：改动视图（SwiftUI）后用 XcodeBuildMCP 工具触发构建验证；编译失败时先读编译诊断、只修诊断指向的问题，再排查其它文件。

@@ -1,0 +1,591 @@
+<title>MoonRise 交互设计</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #f4f5f8; --fg: #1c2230; --muted: #5a6472; --panel: #ffffff; --line: #d9dee6;
+  --accent: #3d56cc; --accent-soft: #e8ecfb; --warn: #946200; --warn-soft: #f6ecd8;
+  --ok: #2e7d46; --ok-soft: #e3f0e8; --err: #b3372f; --err-soft: #f7e6e4;
+  --win: #fbfbfd; --winbar: #e8e9ee; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171e; --fg: #e7eaf0; --muted: #98a2b3; --panel: #1c212b; --line: #2c3442;
+    --accent: #8fa2f5; --accent-soft: #232b41; --warn: #d9a441; --warn-soft: #2e2918;
+    --ok: #6fc28f; --ok-soft: #1b2e23; --err: #e07b72; --err-soft: #3a211f;
+    --win: #1e222b; --winbar: #282d38; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171e; --fg: #e7eaf0; --muted: #98a2b3; --panel: #1c212b; --line: #2c3442;
+  --accent: #8fa2f5; --accent-soft: #232b41; --warn: #d9a441; --warn-soft: #2e2918;
+  --ok: #6fc28f; --ok-soft: #1b2e23; --err: #e07b72; --err-soft: #3a211f;
+  --win: #1e222b; --winbar: #282d38; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); margin: 0; padding-block: 0 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Noto Sans SC", sans-serif;
+  font-size: 15px; line-height: 1.75;
+}
+.wrap { max-width: 780px; margin-inline: auto; }
+header.masthead { padding-block: 56px 8px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.18em; color: var(--muted); margin: 0 0 14px; }
+h1 { font-family: "Noto Serif SC", serif; font-weight: 700; font-size: clamp(30px, 5vw, 42px);
+  line-height: 1.25; margin: 0 0 12px; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 62ch; }
+.legend { margin-top: 28px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px;
+  display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 13px; color: var(--muted); background: var(--panel); }
+.legend b { color: var(--fg); font-weight: 600; }
+.dot { font-weight: 700; }
+section { margin-top: 64px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+.sec-no { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--accent); white-space: nowrap; }
+h2 { font-family: "Noto Serif SC", serif; font-weight: 700; font-size: clamp(21px, 3vw, 26px); margin: 0; text-wrap: balance; }
+.sec-desc { color: var(--muted); margin: 6px 0 0; max-width: 62ch; }
+h3 { font-family: "Noto Serif SC", serif; font-size: 17px; font-weight: 600; margin: 36px 0 10px; }
+.figure { margin-block: 22px; padding: 18px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.figure .mermaid { display: flex; justify-content: center; overflow-x: auto; }
+.mermaid svg { max-width: 100%; height: auto; }
+.figcap { font-size: 13px; color: var(--muted); text-align: center; margin: 12px 12px 0; }
+@media (min-width: 900px) { .wide { margin-inline: calc(50% - min(46vw, 580px)); } }
+@media (min-width: 1300px) { .wide { margin-inline: calc(50% - min(46vw, 700px)); } }
+table { border-collapse: collapse; width: 100%; margin-block: 18px; font-size: 13.5px; }
+.outer-scroll { overflow-x: auto; }
+th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--fg); padding: 8px 12px 8px 0; white-space: nowrap; }
+td { border-bottom: 1px solid var(--line); padding: 9px 12px 9px 0; vertical-align: top; }
+.mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.err { background: var(--err-soft); color: var(--err); }
+.tag.hint { background: var(--accent-soft); color: var(--accent); }
+/* macOS 窗口形态示意 */
+.macwin { background: var(--win); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  margin-block: 20px 8px; box-shadow: 0 4px 18px rgba(0,0,0,.10); max-width: 640px; }
+.winbar { background: var(--winbar); padding: 9px 14px; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--muted); }
+.wdots span { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; }
+.wdots span:nth-child(1){background:#ff5f57}.wdots span:nth-child(2){background:#febc2e}.wdots span:nth-child(3){background:#28c840}
+.wbody { padding: 14px 16px 16px; }
+/* 侧边栏导航（参考 macOS 系统设置） */
+.split { display: flex; align-items: stretch; }
+.sbar { flex: none; width: 150px; background: var(--winbar); border-right: 1px solid var(--line);
+  padding: 10px 8px; }
+.sitem { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 7px;
+  font-size: 13px; color: var(--fg); margin-bottom: 2px; }
+.sitem .ic { font-size: 14px; }
+.sitem.active { background: var(--accent); color: #fff; }
+.scontent { flex: 1; padding: 14px 16px 16px; min-width: 0; }
+.row { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel); }
+.row .head { display: flex; align-items: center; gap: 10px; font-weight: 600; flex-wrap: wrap; }
+.row .spec { color: var(--muted); font-size: 12.5px; margin: 2px 0 8px; }
+.row .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { display: inline-block; border: 1px solid var(--line); border-radius: 7px; padding: 2px 11px;
+  font-size: 12.5px; background: var(--bg); color: var(--fg); white-space: nowrap; }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+.btn.danger { border-color: var(--err); color: var(--err); }
+.btn.disabled { opacity: .42; }
+.tgl { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.tgl i { width: 34px; height: 20px; border-radius: 999px; background: var(--ok); position: relative; font-style: normal; }
+.tgl i::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.tgl.off i { background: var(--line); }
+.tgl.off i::after { right: auto; left: 2px; }
+.frow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.frow label { width: 62px; text-align: right; color: var(--muted); font-size: 13px; flex: none; }
+.finput { border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; background: var(--bg); color: var(--fg);
+  font-family: "IBM Plex Mono", monospace; font-size: 13px; min-width: 110px; }
+.fsel { border: 1px solid var(--accent); border-radius: 7px; padding: 4px 10px; background: var(--accent-soft); color: var(--accent); font-size: 13px; }
+.warnline { font-size: 12px; color: var(--warn); margin: -6px 0 12px 72px; }
+.errline { color: var(--err); font-size: 12px; margin: 6px 0 0; }
+/* 状态胶囊（SwiftUI Label + capsule 背景） */
+.pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill.streaming { background: var(--ok); color: #fff; }
+.pill.idle { border: 1px solid var(--muted); color: var(--fg); }
+.pill.disabled { border: 1px dashed var(--muted); color: var(--muted); }
+.pill.offline { background: var(--warn); color: #fff; }
+/* 菜单栏下拉示意 */
+.mpanel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0,0,0,.10); max-width: 320px; margin-block: 20px 8px; font-size: 13.5px; }
+.mrow { display: flex; align-items: center; gap: 9px; padding: 5px 14px; }
+.mrow.muted { color: var(--muted); }
+.mrow .mkey { margin-left: auto; color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+.msep { border-top: 1px solid var(--line); margin: 5px 0; }
+/* 菜单行拨动开关图形（状态指示） */
+.mtog { flex: none; width: 28px; height: 16px; border-radius: 999px; background: var(--ok); position: relative; }
+.mtog::after { content: ""; position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.mtog.off { background: var(--line); }
+.mtog.off::after { right: auto; left: 2px; }
+/* 错误弹框示意 */
+.alertwin { background: var(--win); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0,0,0,.14); max-width: 320px; margin: 20px auto 8px; padding: 18px 18px 14px; text-align: center; }
+.alertwin .aicon { font-size: 26px; line-height: 1; }
+.alertwin .at { font-weight: 700; font-size: 13.5px; margin: 8px 0 6px; }
+.alertwin .ab { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+.alertwin .aactions { text-align: right; }
+/* 设置页面内分区 */
+.sect { margin-bottom: 16px; }
+.sect > .sect-t { font-size: 12px; letter-spacing: .08em; color: var(--muted); font-weight: 600;
+  margin: 0 0 8px; display: flex; align-items: baseline; gap: 10px; }
+.sect > .sect-t .note { font-weight: 400; letter-spacing: 0; }
+.chip { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 1px 12px;
+  font-family: "IBM Plex Mono", monospace; font-size: 12.5px; background: var(--bg); color: var(--fg); }
+.chip .ifname { color: var(--muted); font-size: 11px; margin-left: 6px; }
+/* 富行（macOS 系统设置分组行式） */
+.groupbox { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 4px; }
+.frich { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+.frich + .frich { border-top: 1px solid var(--line); }
+.frich .fic { flex: none; width: 26px; text-align: center; font-size: 15px; }
+.frich .ft { min-width: 0; line-height: 1.45; }
+.frich .ft .t1 { font-size: 13px; font-weight: 600; }
+.frich .ft .t2 { font-size: 11.5px; color: var(--muted); }
+.frich .fend { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+/* 权限检查单 */
+.checkrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line);
+  font-size: 13px; flex-wrap: wrap; }
+.checkrow:first-of-type { border-top: none; }
+.badge { flex: none; width: 20px; text-align: center; font-weight: 700; }
+.badge.ok { color: var(--ok); } .badge.err { color: var(--err); } .badge.wait { color: var(--warn); }
+.checkrow .cr-label { min-width: 0; }
+.checkrow .cr-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+footer { margin-top: 72px; color: var(--muted); font-size: 13px; }
+/* 配对设备行 */
+.pairdev { border: 1px solid var(--accent); border-radius: 9px; padding: 8px 12px; display: flex; gap: 8px;
+  align-items: center; font-size: 13.5px; background: var(--accent-soft); margin: 6px 0 12px; max-width: 340px; }
+.pinbox { display: flex; gap: 8px; margin: 4px 0 10px; }
+.pinbox b { border: 1px solid var(--accent); border-radius: 8px; width: 34px; height: 40px; display: flex;
+  align-items: center; justify-content: center; font-family: "IBM Plex Mono", monospace; font-size: 18px; background: var(--bg); }
+.result-ok { color: var(--ok); }
+</style>
+
+<div class="wrap">
+<header class="masthead">
+  <p class="eyebrow">MOONRISE · UI 交互设计</p>
+  <h1>设置窗口与菜单栏 · 交互规格</h1>
+  <p class="lede">菜单栏极简：状态聚合 + 每屏开关行（失败弹框）+ 设置入口。「MoonRise 设置」为侧边栏式标准窗口（参考 macOS 系统设置）——通用 / 屏幕 / 诊断三个页面，修改与配对保留独立子窗口，权限引导为四步检查单。全部 SwiftUI 系统默认控件（macOS 27 兼容推荐样式），无确认弹窗，后果写在控件文案。</p>
+  <div class="legend">
+    <span><b>图例</b></span>
+    <span>圆角矩形 = 步骤 / 窗口</span>
+    <span>菱形 = 判定</span>
+    <span>macOS 窗口框 = UI 设计示意（按当前主题渲染）</span>
+    <span><span class="mtog" style="display:inline-block;vertical-align:middle"></span> / <span class="mtog off" style="display:inline-block;vertical-align:middle"></span> 启用状态</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S1</span><h2>窗口与入口总览</h2></div>
+  <p class="sec-desc">菜单栏是唯一常驻入口：屏幕行直接开关对应屏（失败弹框），「设置…」打开设置窗口；权限引导独立成窗（启动缺权限自动弹出）；修改与配对从屏幕页面进入。动作即时生效，成功即关窗。</p>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart LR
+    MENU["菜单栏<br/>状态聚合 + 每屏开关行"] -->|"设置…"| SET["设置窗口（侧边栏导航）<br/>通用 / 屏幕 / 诊断"]
+    MENU -->|"权限引导…"| PERM["权限引导窗口<br/>四步检查单"]
+    BOOT(["启动检测到权限缺失"]) -->|"自动弹出"| PERM
+    SET -->|"屏幕页面：添加屏幕… / 修改…"| EDIT["屏幕修改窗口<br/>（添加 / 修改双模式）"]
+    SET -->|"屏幕页面：配对…"| PAIR["配对窗口"]
+    EDIT -->|"成功即关窗"| SET
+    </pre>
+    <p class="figcap">入口关系：菜单 = 状态与快速开关；设置窗口 = 全部管理；权限引导独立</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S2</span><h2>菜单栏</h2></div>
+  <p class="sec-desc">只保留状态与快速开关。每屏行首是拨动开关图标（反映该屏启用态），点击整行即反转启用；串流中的屏点击即停（中断串流，无确认）。切换失败弹系统样式错误弹框。开机自启、Sunshine 全局操作与诊断入口在设置窗口内。</p>
+  <div class="mpanel">
+    <div class="mrow muted">2 屏 · 串流 1 · 实例 2/2</div>
+    <div class="msep"></div>
+    <div class="mrow"><span class="mtog"></span><span>Moon 1 · <b style="color:var(--ok)">串流中</b></span></div>
+    <div class="mrow"><span class="mtog"></span><span>Moon 2 · 空闲</span></div>
+    <div class="mrow"><span class="mtog off"></span><span style="color:var(--muted)">Moon 3 · 未启用</span></div>
+    <div class="msep"></div>
+    <div class="mrow">设置…</div>
+    <div class="mrow">权限引导…</div>
+    <div class="msep"></div>
+    <div class="mrow">退出 <span class="mkey">⌘Q</span></div>
+  </div>
+  <div class="alertwin">
+    <div class="aicon">⚠️</div>
+    <div class="at">Moon 2 启用失败</div>
+    <div class="ab">端口 48089 被其它程序占用，无法启动该屏实例。端口不迁移。</div>
+    <div class="aactions"><span class="btn primary">好</span></div>
+  </div>
+  <p class="figcap">屏幕行切换失败的错误弹框：标题 = 动作、正文 = 原因、单一「好」（错误反馈弹框，非确认弹窗）</p>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A(["点击菜单屏幕行"]) --> B{"该屏当前启用？"}
+    B -->|"是 · 停用"| C["停该屏实例 + 销毁该屏<br/>配置槽位保留（编号 / 名称 / 端口冻结）"]
+    B -->|"否 · 启用"| D{"冻结端口可绑定？"}
+    D -->|"可"| E["建屏 + 起实例"]
+    D -->|"被占"| F["错误弹框：标题 = 动作 · 正文 = 原因"]
+    C --> G(["菜单行刷新：开关图形与状态词更新"])
+    E --> G
+    F --> G
+    </pre>
+    <p class="figcap">屏幕行点击 = 反转启用；失败弹框提示，端口不迁移</p>
+  </div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>元素</th><th>交互</th></tr>
+    <tr><td>状态聚合行</td><td>「N 屏 · 串流 M · 实例 R/T」，只读不可点；启动失败时显示错误摘要</td></tr>
+    <tr><td>屏幕行</td><td>拨动开关图标（开 = 启用 / 关 = 停用）+ 名称 + 状态词（<span style="color:var(--ok)">串流中</span> / 空闲 / <span style="color:var(--muted)">未启用</span> / <span style="color:var(--warn)">离线</span>）。点击整行反转启用；失败弹错误弹框；开关图形仅作状态指示，不可单独点击</td></tr>
+    <tr><td>设置…</td><td>打开设置窗口（busy 时置灰）</td></tr>
+    <tr><td>权限引导…</td><td>打开权限引导窗口</td></tr>
+    <tr><td>退出</td><td>⌘Q；退出即停全部实例并销毁全部虚拟屏（生命周期即进程）。开机自启不在菜单——在设置窗口通用页</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S3</span><h2>设置窗口框架</h2></div>
+  <p class="sec-desc">标准窗口「MoonRise 设置」，布局参考 macOS 系统设置：左侧栏导航（SF Symbols 图标 + 文字，选中项系统强调色填充：通用 / 屏幕 / 诊断）+ 右侧内容区，SwiftUI 当前推荐实现（NavigationSplitView）。内容驱动高度——页面切换与内容变化时窗口高度实时跟随并自动居中主屏；不可手动拖拽调整。打开时 App 切换为常规激活（Dock 图标 + App 菜单），关闭最后一个窗口后回到纯菜单栏形态。</p>
+  <div class="macwin" style="max-width:640px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
+    <div class="split">
+      <div class="sbar">
+        <div class="sitem active"><span class="ic">⚙️</span>通用</div>
+        <div class="sitem"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem"><span class="ic">🩺</span>诊断</div>
+      </div>
+      <div class="scontent" style="text-align:center;color:var(--muted);font-size:12.5px;padding-block:36px">
+        页面内容区（各页详见 S4 / S5 / S9）
+      </div>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart LR
+    A(["打开设置窗口"]) --> B[".regular：Dock 图标 + App 菜单<br/>cmd-tab 可达 · 激活时其它 App 让出"]
+    B --> C(["关闭最后一个 MoonRise 窗口"])
+    C --> D[".accessory：回到纯菜单栏形态"]
+    </pre>
+    <p class="figcap">标准窗口激活策略：窗口期间常规 App 形态，关窗即回菜单栏形态（生命周期即进程不变）</p>
+  </div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>元素</th><th>交互</th></tr>
+    <tr><td>侧边栏导航</td><td>三项：⚙ gearshape 通用 / 🖥 rectangle.on.rectangle 屏幕 / 🩺 stethoscope 诊断（示意图形，实现用 SF Symbols）。点击切换页面，窗口高度按内容伸缩并居中；选中项系统强调色填充；记忆上次停留页（会话内）</td></tr>
+    <tr><td>窗口形态</td><td>标准 NSWindow（激活策略切换见上图）；内容驱动高度，侧栏定宽 + 内容区设计定宽，尺寸变化后自动居中主屏可视区；styleMask 不含 .resizable（不手动拖拽调整）</td></tr>
+    <tr><td>页内设计语言</td><td>整个 app 统一 macOS 27 设计语言；页内 = macOS 系统设置分组行式：通用 / 诊断页富行（图标 + 标题 + 描述 + 尾部控件 / 状态徽章），屏幕页保留卡片（内部行距与分组对齐系统行规范）</td></tr>
+    <tr><td>数字规则</td><td>端口、宽、高等数字一律无千分位分组（47989 而非 47,989），全局适用</td></tr>
+    <tr><td>弹框规则</td><td>系统 alert 样式；错误反馈弹框（如菜单切换失败）与无确认原则并存——破坏性操作仍不加确认步骤</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S4</span><h2>通用页面</h2></div>
+  <p class="sec-desc">公共设置（富行式，macOS 系统设置设计语言）：分组圆角容器 + 组标题，每行 = 图标 + 标题 + 描述小字 + 尾部控件。开机自启的唯一入口在本页。</p>
+  <div class="macwin" style="max-width:640px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
+    <div class="split">
+      <div class="sbar">
+        <div class="sitem active"><span class="ic">⚙️</span>通用</div>
+        <div class="sitem"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem"><span class="ic">🩺</span>诊断</div>
+      </div>
+      <div class="scontent">
+        <div class="sect">
+          <div class="sect-t">显示器</div>
+          <div class="groupbox">
+            <div class="frich"><span class="fic">🖥️</span><span class="ft"><span class="t1">保持显示器缩放</span><br><span class="t2">拓扑变化后恢复 host 缩放，防低分辨率闪烁</span></span><span class="fend"><span class="tgl"><i></i></span></span></div>
+          </div>
+        </div>
+        <div class="sect">
+          <div class="sect-t">串流</div>
+          <div class="groupbox">
+            <div class="frich"><span class="fic">🔇</span><span class="ft"><span class="t1">禁用音频串流</span><br><span class="t2">同步写入主 conf 与全部实例 conf（值变才重启）</span></span><span class="fend"><span class="tgl off"><i></i></span></span></div>
+          </div>
+        </div>
+        <div class="sect" style="margin-bottom:0">
+          <div class="sect-t">系统</div>
+          <div class="groupbox">
+            <div class="frich"><span class="fic">⏻</span><span class="ft"><span class="t1">开机自启</span><br><span class="t2">登录时自动启动 MoonRise（菜单栏无此项）</span></span><span class="fend"><span class="tgl"><i></i></span></span></div>
+            <div class="frich"><span class="fic">🔁</span><span class="ft"><span class="t1">重启全部实例</span><br><span class="t2">全部屏实例串行重启</span></span><span class="fend"><span class="btn">重启</span></span></div>
+            <div class="frich"><span class="fic">⟳</span><span class="ft"><span class="t1">重新同步</span><br><span class="t2">diff 收敛 + 逐实例 conf 对账，值变才重启</span></span><span class="fend"><span class="btn">同步</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>元素</th><th>交互</th></tr>
+    <tr><td>富行结构</td><td>每行 = 图标 + 标题 + 描述小字 + 尾部控件（Toggle / 按钮）；分组标题：显示器 / 串流 / 系统；分组圆角容器</td></tr>
+    <tr><td>保持显示器缩放</td><td>显示器组；全局 Toggle，即时写盘</td></tr>
+    <tr><td>禁用音频串流</td><td>串流组；全局 Toggle，值变按实例精确重启（只重启受影响实例，不打断其它串流）</td></tr>
+    <tr><td>开机自启</td><td>系统组；全局 Toggle；设置内唯一入口（菜单栏无该项）</td></tr>
+    <tr><td>重启全部实例</td><td>系统组；按钮即时执行（全部屏实例串行重启），busy 置灰</td></tr>
+    <tr><td>重新同步</td><td>系统组；按钮执行全量 diff 收敛 + 逐实例 conf 对账（值变才重启），busy 置灰</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S5</span><h2>屏幕页面</h2></div>
+  <p class="sec-desc">顶部公共信息区（本机全部有效 IPv4，只展示、无复制交互，多屏共用）+「添加屏幕…」+ 每屏一张卡片：只读信息（状态胶囊 / 端口标签 / 规格行 / 同步状态）+ 内联控件。行内动作失败就地报错，保留至下次动作或 5s；停用卡片降透明；首屏不可删除。状态每秒自动刷新。</p>
+  <div class="macwin" style="max-width:640px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
+    <div class="split">
+      <div class="sbar">
+        <div class="sitem"><span class="ic">⚙️</span>通用</div>
+        <div class="sitem active"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem"><span class="ic">🩺</span>诊断</div>
+      </div>
+      <div class="scontent">
+        <div class="sect">
+          <div class="sect-t">本机 IP 地址 <span class="note">· 多屏共用</span></div>
+          <span class="chip">192.168.200.146<span class="ifname">en0</span></span>
+          <span class="chip">10.8.0.15<span class="ifname">utun3</span></span>
+        </div>
+        <div class="btns" style="margin-bottom:10px"><span class="btn primary">添加屏幕…</span>
+          <span style="color:var(--muted);font-size:12px;margin-left:auto">状态每秒自动刷新</span></div>
+        <div class="row">
+          <div class="head"><span class="pill streaming">● 串流中</span> Moon 1 · 端口 47989 <span class="tag ok">已同步</span></div>
+          <div class="spec mono">2560×1600 · 60 Hz · HiDPI · 等效 1280×800</div>
+          <div class="btns">
+            <span class="tgl"><i></i>启用</span>
+            <span class="btn">重启串流</span><span class="btn">Web UI</span><span class="btn">配对…</span>
+            <span class="btn primary">修改…</span><span class="btn disabled">删除（销屏并清理）</span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="head"><span class="pill idle">○ 空闲</span> Moon 2 · 端口 48089 <span class="tag ok">已同步</span></div>
+          <div class="spec mono">2048×1536 · 60 Hz · HiDPI · 等效 1024×768</div>
+          <div class="btns">
+            <span class="tgl"><i></i>启用</span>
+            <span class="btn">重启串流</span><span class="btn">Web UI</span><span class="btn">配对…</span>
+            <span class="btn primary">修改…</span><span class="btn danger">删除（销屏并清理）</span>
+          </div>
+          <div class="errline">✗ 启用失败：端口 48089 被其它程序占用</div>
+        </div>
+        <div class="row" style="opacity:.62">
+          <div class="head"><span class="pill disabled">◌ 未启用</span> Moon 3 · 端口 48189</div>
+          <div class="spec mono">1920×1080 · 60 Hz</div>
+          <div class="btns">
+            <span class="tgl off"><i></i>启用</span>
+            <span class="btn disabled">重启串流</span><span class="btn disabled">Web UI</span><span class="btn disabled">配对…</span>
+            <span class="btn primary">修改…</span><span class="btn danger">删除（销屏并清理）</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>元素</th><th>交互</th></tr>
+    <tr><td>IP chips</td><td>全部有效 IPv4 地址（回环除外，物理网卡 en* 优先排序，附接口名）。只展示，无复制交互</td></tr>
+    <tr><td>卡片形态</td><td>状态聚合体（胶囊 + 规格 + 动作按钮行）；内部行距与分组对齐 macOS 系统设置行规范</td></tr>
+    <tr><td>状态胶囊</td><td><span class="pill streaming">● 串流中</span> 绿底白字实心 / <span class="pill idle">○ 空闲</span> 灰描边 / <span class="pill disabled">◌ 未启用</span> 灰虚线描边（卡片降透明） / <span class="pill offline">▲ 离线</span> 橙底白字实心。只读，1s 刷新</td></tr>
+    <tr><td>端口标签</td><td>统一「端口 NNNNN」（首屏 47989 亦同），无千分位。只读</td></tr>
+    <tr><td>规格行</td><td>「宽×高 · 刷新率 Hz · HiDPI · 等效 宽/2×高/2」；HiDPI 关闭时只显示「宽×高 · 刷新率 Hz」。只读</td></tr>
+    <tr><td>同步状态</td><td>conf 同步标记（已同步 / 待重启…），只读</td></tr>
+    <tr><td>启用开关</td><td>即时生效。ON→OFF：停实例 + 销屏（首屏联动停主实例）；OFF→ON：建屏 + 起实例。冻结端口被占时卡片内报错，端口不迁移</td></tr>
+    <tr><td>重启串流</td><td>即时生效：重启该屏绑定的串流实例（虚拟屏不动，串流短暂中断后自动恢复）。停用屏置灰</td></tr>
+    <tr><td>Web UI</td><td>打开 <code>https://localhost:端口+1</code>。停用屏置灰</td></tr>
+    <tr><td>配对…</td><td>打开配对窗口（S7）。首屏为 Web UI 引导形态。停用屏置灰</td></tr>
+    <tr><td>修改…</td><td>打开修改窗口（S6）。停用屏仍可用；同屏复用已有窗口并置前</td></tr>
+    <tr><td>删除</td><td>点击即删（停实例 + 销屏 + 清实例目录）；按钮文案「删除（销屏并清理）」自带后果。首屏置灰禁用（绑定主 sunshine 配置的实现层约束）。停用屏仍可删</td></tr>
+    <tr><td>添加屏幕…</td><td>打开修改窗口添加模式（S6）；添加成功即建屏起实例</td></tr>
+    <tr><td>卡片错误行</td><td>窗口内动作失败就地红色错误行，保留至下次动作或 5s，不弹窗（菜单切换失败走弹框，见 S2）</td></tr>
+  </table>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A(["点击 添加屏幕…"]) --> B["屏幕修改窗口 · 添加模式<br/>预设（分组下拉）+ 名称 + 宽/高/刷新率/HiDPI"]
+    B --> C(["点击 添加"])
+    C --> D{"校验：规格越界 / 名称唯一 / 身份向量不撞"}
+    D -->|不通过| E["就地报错 · 窗口保持"]
+    D -->|通过| F["分配编号 + Moon N 命名 + 冻结端口"]
+    F --> G["建屏 + 起实例（含二进制副本）"]
+    G --> H(["窗口关闭 · 列表刷新"])
+    </pre>
+    <p class="figcap">添加流程：选预设即填充规格，校验通过即创建，成功即关窗</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S6</span><h2>屏幕修改窗口</h2></div>
+  <p class="sec-desc">逐屏独立窗口（添加 / 修改双模式），SwiftUI 默认控件风格。预设下拉按分组（MacBook / iPad / Apple 显示器 / 通用）选中即填充宽/高/刷新率与 HiDPI；预设项的文字「HiDPI」标记表示选中后 HiDPI 开关自动为开；再手改字段不回弹选择器。删除不在本窗口——在屏幕页面的卡片上。</p>
+  <div class="macwin" style="max-width:430px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>修改屏幕 — Moon 2</div>
+    <div class="wbody">
+      <div class="frow"><label>预设</label><span class="fsel">iPad mini 4 · 2048×1536 · HiDPI ▾</span></div>
+      <div class="frow"><label>名称</label><span class="finput" style="min-width:170px">Moon 2</span></div>
+      <div class="warnline">⚠ 改名将重置该屏位置与 Retina 记忆</div>
+      <div class="frow"><label>宽 / 高</label><span class="finput">2048</span><span class="finput">1536</span></div>
+      <div class="frow"><label>刷新率</label><span class="fsel">60 Hz ▾</span>
+        <label style="width:auto;margin-left:14px">HiDPI</label><span class="tgl"><i></i></span></div>
+      <div class="frow" style="margin-top:16px">
+        <span style="flex:1"></span>
+        <span class="btn">取消</span><span class="btn primary">应用修改（将短暂中断串流）</span>
+      </div>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A(["点击 应用修改"]) --> B{"规格校验<br/>64–16384px · 1–240Hz"}
+    B -->|不通过| E1["就地报错 · 窗口保持"]
+    B -->|通过| C{"名称唯一 + 身份向量不撞<br/>（对其余屏校验）"}
+    C -->|冲突| E2["就地报错 · 窗口保持"]
+    C -->|通过| D["写配置（槽位字段）"]
+    D -->|"启用屏"| G["该屏销毁重建 + 实例 conf 同步<br/>（值变才重启该实例）"]
+    D -->|"停用屏"| P["仅写配置 · 启用后生效"]
+    G --> H(["成功即关窗 · 列表刷新"])
+    P --> H
+    </pre>
+    <p class="figcap">应用流程：校验链失败就地报错；成功即关窗（无确认弹窗）</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S7</span><h2>配对窗口</h2></div>
+  <p class="sec-desc">逐屏独立窗口：打开即确保实例 Web 凭据可用（空则自动预置），随后 2s 轮询待配对设备；输入 Moonlight 显示的 4 位 PIN 提交，成功后窗口保持（可连续配对）。首屏打开时为 Web UI 引导形态（主实例凭据归用户，不接管）。</p>
+  <div class="macwin" style="max-width:400px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>配对 — Moon 2</div>
+    <div class="wbody">
+      <div class="pairdev"><span class="dot" style="color:var(--accent)">◉</span> iPad-Pro（192.168.200.88）</div>
+      <div class="frow"><label>PIN</label>
+        <span class="pinbox"><b>2</b><b>1</b><b>7</b><b>2</b></span></div>
+      <div class="frow" style="margin-top:6px">
+        <span class="btn primary">提交配对</span>
+        <span style="flex:1"></span><span class="btn">关闭</span>
+      </div>
+      <p style="font-size:13px;margin:12px 0 0" class="result-ok">✓ 已配对，客户端可连接</p>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A(["打开配对窗口（扩展屏实例）"]) --> B{"实例 Web 凭据状态"}
+    B -->|"为空"| C["自动预置随机用户名/密码（0600）"]
+    B -->|"已预置"| D["使用预置凭据"]
+    B -->|"用户已自设"| X["降级提示 + 打开 Web UI 按钮"]
+    C --> D
+    D --> P["每 2s 轮询待配对设备"]
+    P --> Q{"有设备？"}
+    Q -->|无| P
+    Q -->|有| R["显示设备（名称 + 地址）<br/>等待输入 4 位 PIN"]
+    R --> S["提交 PIN"]
+    S --> T{"结果"}
+    T -->|"成功 ✓"| U["已配对 · 回到轮询（可配下一台）"]
+    T -->|"PIN 错误 ✗"| R
+    T -->|"会话超时"| P
+    </pre>
+    <p class="figcap">配对时序：凭据预置 → 轮询 → PIN 提交 → 三态结果（错误可重输、超时回轮询）</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S8</span><h2>权限引导窗口</h2></div>
+  <p class="sec-desc">四步检查单：屏幕捕获、输入控制、Sunshine 进程、编码器探测。每行状态徽章 + 就地动作；1s 轮询刷新，授权完成后自动重启全部实例。权限对象是 MoonRise（Sunshine 以子进程运行，macOS 按责任进程向 MoonRise 收权限）。启动时检测到权限缺失自动弹出。</p>
+  <div class="macwin" style="max-width:520px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>权限引导</div>
+    <div class="wbody">
+      <div class="checkrow">
+        <span class="badge ok">✓</span><span class="cr-label">屏幕捕获（MoonRise）— 已授予</span>
+      </div>
+      <div class="checkrow">
+        <span class="badge err">✗</span><span class="cr-label">输入控制（MoonRise）— 未授予</span>
+        <span class="cr-actions"><span class="btn">请求输入控制授权</span><span class="btn">打开系统设置</span></span>
+      </div>
+      <div class="checkrow">
+        <span class="badge ok">✓</span><span class="cr-label">Sunshine 进程 — 运行中</span>
+      </div>
+      <div class="checkrow">
+        <span class="badge err">✗</span><span class="cr-label">编码器探测 — 未通过（需权限或重启）</span>
+        <span class="cr-actions"><span class="btn">重启 Sunshine</span></span>
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);margin:12px 0 0">
+        ② 输入控制：点「请求输入控制授权」→ 系统设置中打开 MoonRise 开关（Moon 端键鼠控制需要）。完成后本面板数秒内自动变绿，Sunshine 会自动重启。
+      </p>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart TD
+    A(["打开（菜单 或 启动自动弹出）"]) --> B["渲染四步检查单（1s 刷新）<br/>捕获 / 输入控制 / Sunshine 进程 / 编码器探测"]
+    B --> C{"捕获或输入未授予？"}
+    C -->|是| D["行内指引 + 就地动作<br/>请求授权 / 打开系统设置"]
+    D --> E["授权完成（轮询感知）"]
+    C -->|否| E
+    E --> F["自动重启全部实例<br/>状态行：进行中 → 完成"]
+    F --> G{"编码器探测通过？"}
+    G -->|是| H(["完成态：全部就绪 · 可连接验证"])
+    G -->|否| I["提示手动点「重启 Sunshine」"]
+    I --> G
+    </pre>
+    <p class="figcap">权限流程：检查单 → 引导授权 → 自动重启实例 → 探测通过到完成态</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-no">S9</span><h2>诊断页面</h2></div>
+  <p class="sec-desc">切入诊断页面即后台检查、就绪逐项渲染（检查中加载态），「重新检查」手动重跑。富行式：每检查项一行 = 图标 + 名称 + 摘要小字 + 尾部状态徽章；不再有独立诊断窗口。</p>
+  <div class="macwin" style="max-width:640px">
+    <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
+    <div class="split">
+      <div class="sbar">
+        <div class="sitem"><span class="ic">⚙️</span>通用</div>
+        <div class="sitem"><span class="ic">🖥️</span>屏幕</div>
+        <div class="sitem active"><span class="ic">🩺</span>诊断</div>
+      </div>
+      <div class="scontent">
+        <div class="groupbox" style="margin-bottom:10px">
+          <div class="frich"><span class="fic">🧬</span><span class="ft"><span class="t1">虚拟屏私有 API</span><br><span class="t2">macOS 私有类与 selector 是否全部在位</span></span><span class="fend"><span class="tag ok">✅ 全部在位</span></span></div>
+          <div class="frich"><span class="fic">🖥️</span><span class="ft"><span class="t1">虚拟屏 · Moon 1</span><br><span class="t2">id=3 · 2560×1600@60</span></span><span class="fend"><span class="tag ok">✅ 在活动列表</span></span></div>
+          <div class="frich"><span class="fic">🖥️</span><span class="ft"><span class="t1">虚拟屏 · Moon 2</span><br><span class="t2">id=4 · 2048×1536@60</span></span><span class="fend"><span class="tag ok">✅ 在活动列表</span></span></div>
+          <div class="frich"><span class="fic">📦</span><span class="ft"><span class="t1">Sunshine 安装</span><br><span class="t2">/opt/homebrew/bin/sunshine</span></span><span class="fend"><span class="tag ok">✅ 已安装</span></span></div>
+          <div class="frich"><span class="fic">🔒</span><span class="ft"><span class="t1">屏幕捕获权限</span><br><span class="t2">MoonRise 本进程 preflight（全部实例共用归属）</span></span><span class="fend"><span class="tag ok">✅ 已授予</span></span></div>
+          <div class="frich"><span class="fic">🎥</span><span class="ft"><span class="t1">编码器探测 · Moon 1</span><br><span class="t2">实例日志判定捕获与 VideoToolbox 就绪</span></span><span class="fend"><span class="tag ok">✅ 就绪</span></span></div>
+          <div class="frich"><span class="fic">🖼️</span><span class="ft"><span class="t1">Retina 指引 · Moon 1</span><br><span class="t2">Moonlight 端分辨率选 1280×800（等效）</span></span><span class="fend"><span class="tag hint">ℹ️ 指引</span></span></div>
+          <div class="frich"><span class="fic">📺</span><span class="ft"><span class="t1">外接显示器清单</span><br><span class="t2">非 MoonRise 外接屏（发现 Duet 等干扰）</span></span><span class="fend"><span class="tag hint">ℹ️ 无</span></span></div>
+        </div>
+        <div class="btns"><span class="btn">重新检查</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="figure wide">
+    <pre class="mermaid">
+flowchart LR
+    A(["切入诊断页"]) --> B["后台执行检查（加载态）"]
+    B --> C["逐项渲染检查结果"]
+    C --> D(["「重新检查」→ 重跑"])
+    </pre>
+    <p class="figcap">诊断时序：随页面切入自动检查，手动可重跑</p>
+  </div>
+  <div class="outer-scroll">
+  <table>
+    <tr><th>检查项</th><th>语义</th></tr>
+    <tr><td>虚拟屏私有 API</td><td>macOS 私有类与 selector 是否全部在位（系统升级后失效的第一现场）</td></tr>
+    <tr><td>虚拟屏 · 逐屏</td><td>已启用屏是否在活动显示器列表（displayID 与规格）</td></tr>
+    <tr><td>Sunshine 安装</td><td>二进制探测结果与路径</td></tr>
+    <tr><td>output_name 一致性</td><td>主 conf / 实例 conf 逐屏核对，不一致给「重新同步」指引</td></tr>
+    <tr><td>屏幕捕获权限</td><td>MoonRise 本进程 preflight（权威，全部实例共用归属）</td></tr>
+    <tr><td>编码器探测 · 逐实例</td><td>从实例日志判定捕获与 VideoToolbox 就绪</td></tr>
+    <tr><td>Retina 指引</td><td>逐屏给出 Moonlight 端应设分辨率（HiDPI 时按等效分辨率提示）</td></tr>
+    <tr><td>外接显示器清单</td><td>非 MoonRise 外接屏列表（发现 Duet 等虚拟屏干扰）</td></tr>
+  </table>
+  </div>
+</section>
+
+<footer>
+  <p>配套计划：Plans/ui-refresh-plan.md · 实现为 SwiftUI；本文档为实现目标态（仅交互流程与界面示意），代码落地后按此核对。</p>
+</footer>
+</div>
+<script>
+(function () {
+  var attr = document.documentElement.getAttribute('data-theme');
+  var dark = attr === 'dark' || (attr !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: dark ? 'dark' : 'neutral',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif'
+  });
+})();
+</script>

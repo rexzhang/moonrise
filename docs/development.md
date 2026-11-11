@@ -28,7 +28,7 @@ bash scripts/install-app.sh
 
 - Sources/VirtualDisplayObjC：CGVirtualDisplay 私有 API 薄封装（MRC，-fno-objc-arc；运行时类/selector 全量校验，缺失时点名报错，不崩溃）
 - Sources/MoonRiseCore：规格/身份/多槽控制器/收敛计划/预设库、配置（displays 数组 + 迁移）、状态、Sunshine 集成（ConfFile、InstanceConf、SunshineProcessDiscovery、ChildProcessSunshineManager、SunshineInstanceRegistry、SunshineSync、StreamStateMonitor）、权限检测
-- Sources/MoonRiseBar：菜单栏 App（AppController / DisplayOrchestrator / ScreenManagerWindow / PermissionPanel / DiagnosticsWindow / ResolutionPanel）
+- Sources/MoonRiseBar：菜单栏 App（AppController / DisplayOrchestrator / SettingsWindow（设置三页面 + 修改/配对子窗口）/ ScreenEditWindow / PairingWindow / PermissionPanel / DiagnosticsWindow（诊断检查模型））
 - Tests/MoonRiseCoreTests：核心库单测
 - AGENTS.md / CLAUDE.md：AI 编码代理的项目规则（含硬约束清单，改动 VirtualDisplay 层前必读）
 - Plans/implementation-plan.md：设计决策与实测结论记录；Plans/multi-display-plan.md 与 Plans/multi-display-spike.md：多屏设计与实测报告

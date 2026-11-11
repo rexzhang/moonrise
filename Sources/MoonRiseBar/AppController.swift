@@ -1,5 +1,5 @@
-// AppController.swift — 菜单栏 App 主体：多屏编排接线、状态显示菜单、守护。
-// 菜单只做状态显示（D7）；全部管理操作收敛于统一管理窗口。
+// AppController.swift — 菜单栏 App 主体：多屏编排接线、菜单栏状态与每屏开关、守护。
+// 菜单栏只做状态显示与快速开关；全部管理操作收敛于设置窗口（SettingsWindowController）。
 
 import AppKit
 import CoreGraphics
@@ -42,7 +42,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var watchdog: Timer?
     private var lastCapturePermission: Bool?
     private var restartedSunshineAfterGrant = false
-    private var diagnosticsWindow: DiagnosticsWindow?
     private var permissionPanel: PermissionPanel?
 
     // MARK: - 生命周期
@@ -248,71 +247,38 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
         menu.addItem(statusMenuItem())
 
-        let summaries = screenSummaries()
-        let enabledCount = summaries.filter(\.enabled).count
-        let streamingCount = summaries.filter { $0.state == .streaming }.count
-        let instancesTotal = summaries.filter { $0.enabled }.count
-        let instancesRunning = summaries.filter { $0.enabled && $0.instanceStatus != "未运行" }.count
-
-        for summary in summaries {
+        // 每屏一行：拨动开关图标反映启用态，点击整行反转（D2）
+        for summary in screenSummaries() {
             let item = NSMenuItem(
-                title: "\(summary.state.symbol) \(summary.name) · \(summary.state.label)",
-                action: #selector(openScreenManagerMenuItem(_:)),
+                title: "\(summary.name) · \(summary.state.label)",
+                action: #selector(toggleScreenMenuItem(_:)),
                 keyEquivalent: "")
             item.target = self
             item.representedObject = summary.slotID.uuidString
+            item.isEnabled = !busy
+            if let symbol = NSImage(systemSymbolName: summary.enabled ? "toggleon" : "toggleoff",
+                                    accessibilityDescription: summary.enabled ? "已启用" : "已停用") {
+                let color = summary.enabled ? NSColor.systemGreen : NSColor.secondaryLabelColor
+                item.image = symbol.withSymbolConfiguration(.init(paletteColors: [color]))
+            }
             menu.addItem(item)
         }
 
         menu.addItem(.separator())
 
-        let manageItem = NSMenuItem(title: "扩展屏幕管理…", action: #selector(openScreenManager(_:)), keyEquivalent: "")
-        manageItem.target = self
-        manageItem.isEnabled = !busy
-        menu.addItem(manageItem)
-
-        let sunshineRoot = NSMenuItem(title: "Sunshine", action: nil, keyEquivalent: "")
-        let sunshineMenu = NSMenu()
-        let runStateItem = NSMenuItem(title: "主实例：\(sunshineManager.statusLine())", action: nil, keyEquivalent: "")
-        runStateItem.isEnabled = false
-        sunshineMenu.addItem(runStateItem)
-        let audioItem = NSMenuItem(title: "禁用音频串流", action: #selector(toggleAudioStreaming), keyEquivalent: "")
-        audioItem.target = self
-        audioItem.isEnabled = !busy
-        audioItem.state = config.sunshine.disableAudioStreaming ? .on : .off
-        sunshineMenu.addItem(audioItem)
-        let restartAllItem = NSMenuItem(title: "重启全部实例", action: #selector(restartAllInstances), keyEquivalent: "")
-        restartAllItem.target = self
-        restartAllItem.isEnabled = !busy && instancesRunning > 0
-        sunshineMenu.addItem(restartAllItem)
-        let syncItem = NSMenuItem(title: "重新同步", action: #selector(resyncAll), keyEquivalent: "")
-        syncItem.target = self
-        syncItem.isEnabled = !busy
-        sunshineMenu.addItem(syncItem)
-        sunshineRoot.submenu = sunshineMenu
-        menu.addItem(sunshineRoot)
+        let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        settingsItem.target = self
+        settingsItem.isEnabled = !busy
+        menu.addItem(settingsItem)
 
         let permissionItem = NSMenuItem(title: "权限引导…", action: #selector(showPermissionPanel), keyEquivalent: "")
         permissionItem.target = self
         permissionItem.isEnabled = !busy
         menu.addItem(permissionItem)
 
-        let diagnosticsItem = NSMenuItem(title: "诊断…", action: #selector(showDiagnostics), keyEquivalent: "")
-        diagnosticsItem.target = self
-        diagnosticsItem.isEnabled = !busy
-        menu.addItem(diagnosticsItem)
-
         menu.addItem(.separator())
 
-        let loginItem = NSMenuItem(title: "开机自启", action: #selector(toggleLoginItem), keyEquivalent: "")
-        loginItem.target = self
-        loginItem.isEnabled = !busy
-        loginItem.state = loginItemStatus
-        menu.addItem(loginItem)
-
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(title: "退出 MoonRise", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         quitItem.isEnabled = !busy
         menu.addItem(quitItem)
@@ -359,12 +325,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - 菜单动作
 
-    @objc private func openScreenManagerMenuItem(_ sender: NSMenuItem) {
-        showScreenManager()
+    @objc private func openSettings(_ sender: NSMenuItem) {
+        showSettings()
     }
 
-    @objc private func openScreenManager(_ sender: NSMenuItem) {
-        showScreenManager()
+    /// 菜单屏幕行点击：反转该屏启用（失败弹错误框）。
+    @objc private func toggleScreenMenuItem(_ sender: NSMenuItem) {
+        guard let uuidString = sender.representedObject as? String,
+              let slotID = UUID(uuidString: uuidString),
+              let display = config.displays.first(where: { $0.id == slotID }) else { return }
+        var updated = display
+        updated.enabled.toggle()
+        setEnabled(updated, fromMenu: true)
     }
 
     @objc private func resyncAll() {
@@ -389,10 +361,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func toggleAudioStreaming() {
-        config.sunshine.disableAudioStreaming.toggle()
+    /// 禁用音频串流（设置通用页）：值变才重启受影响实例（精确到实例）。
+    private func toggleAudioStreaming(disabled: Bool) {
+        guard config.sunshine.disableAudioStreaming != disabled else { return }
+        config.sunshine.disableAudioStreaming = disabled
         try? config.save()
-        resyncAll()   // 值变才重启受影响实例（精确到实例）
+        resyncAll()
     }
 
     @objc private func showPermissionPanel() {
@@ -409,42 +383,42 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }))
     }
 
-    @objc private func showDiagnostics() {
-        if diagnosticsWindow == nil {
-            diagnosticsWindow = DiagnosticsWindow()
-        }
-        let live = liveIDs()
-        let screens = screenSummaries().map { summary in
-            DiagnosticsWindow.ScreenDiagnostics(
-                name: summary.name,
-                slotID: summary.slotID,
-                displayID: summary.displayID,
-                isLive: summary.displayID.map { live.contains($0) } ?? false,
-                spec: summary.spec,
-                port: summary.port,
-                enabled: summary.enabled,
-                syncStatus: summary.syncStatus)
-        }
-        diagnosticsWindow?.present(context: DiagnosticsWindow.DiagnosticsContext(
-            screens: screens,
+    /// 诊断页数据源：主线程快照 → 后台跑检查 → 主线程回调（设置窗口「切入即检查」）。
+    private func runDiagnostics(completion: @escaping ([DiagnosticsModel.CheckRow]) -> Void) {
+        let context = DiagnosticsModel.Context(
+            screens: screenSummaries().map { summary in
+                DiagnosticsModel.ScreenDiagnostics(
+                    name: summary.name,
+                    slotID: summary.slotID,
+                    displayID: summary.displayID,
+                    isLive: summary.displayID.map { liveIDs().contains($0) } ?? false,
+                    spec: summary.spec,
+                    port: summary.port,
+                    enabled: summary.enabled,
+                    syncStatus: summary.syncStatus)
+            },
             sunshineStatus: sunshineStatus,
-            manager: sunshineManager))
+            manager: sunshineManager)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let rows = DiagnosticsModel.runChecks(context: context)
+            DispatchQueue.main.async { completion(rows) }
+        }
     }
 
-    @objc private func toggleLoginItem() {
-        if #available(macOS 13.0, *) {
-            let service = SMAppService.mainApp
-            do {
-                if service.status == .enabled {
-                    try service.unregister()
-                } else {
-                    try service.register()
-                }
-            } catch {
-                showInfoAlert("开机自启设置失败", text: "\(error.localizedDescription)\n\n从 swift run 直接启动无法注册登录项；请先用 scripts/install-app.sh 安装为 App。")
+    /// 开机自启（设置通用页唯一入口；失败弹框提示安装场景限制）。
+    private func setLoginItem(_ enabled: Bool) {
+        guard #available(macOS 13.0, *) else { return }
+        let service = SMAppService.mainApp
+        do {
+            if enabled, service.status != .enabled {
+                try service.register()
+            } else if !enabled, service.status == .enabled {
+                try service.unregister()
             }
-            refreshMenu()
+        } catch {
+            showInfoAlert("开机自启设置失败", text: "\(error.localizedDescription)\n\n从 swift run 直接启动无法注册登录项；请先用 scripts/install-app.sh 安装为 App。")
         }
+        refreshScreenModel()
     }
 
     @objc private func quitApp() {
@@ -453,33 +427,42 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - 扩展屏幕管理（SwiftUI 三窗：列表 / 修改 / 配对）
 
-    private func showScreenManager() {
+    private func showSettings() {
         wireScreenCallbacks()
         refreshScreenModel()
-        ScreenWindowController.shared.showList()
+        SettingsWindowController.shared.showSettings()
     }
 
     private func refreshScreenModel() {
         let displays = config.displays
         let summaries = screenSummaries()
         let keep = config.keepHostScaling
+        let audio = config.sunshine.disableAudioStreaming
+        let login = loginItemStatus == .on
+        let lan = Self.lanAddresses()
         DispatchQueue.main.async {
-            ScreenWindowController.shared.model.refresh(
-                displays: displays, summaries: summaries, keepHostScaling: keep)
+            SettingsWindowController.shared.model.refresh(
+                displays: displays,
+                summaries: summaries,
+                keepHostScaling: keep,
+                disableAudioStreaming: audio,
+                loginItemEnabled: login,
+                lanAddresses: lan)
         }
     }
 
     private func wireScreenCallbacks() {
-        ScreenWindowController.shared.model.callbacks = ScreenCallbacks(
-            toggleEnabled: { [weak self] display in self?.setEnabled(display) },
+        let model = SettingsWindowController.shared.model
+        model.callbacks = ScreenCallbacks(
+            toggleEnabled: { [weak self] display, fromMenu in self?.setEnabled(display, fromMenu: fromMenu) },
             restartSlot: { [weak self] slotID in self?.restartSlot(slotID: slotID) },
             openWebUI: { port in
                 if let url = URL(string: "https://localhost:\(port)") {
                     NSWorkspace.shared.open(url)
                 }
             },
-            openPairing: { [weak self] display in
-                ScreenWindowController.shared.openPairing(display: display)
+            openPairing: { display in
+                SettingsWindowController.shared.openPairing(display: display)
             },
             openEdit: { [weak self] display in self?.openEdit(display) },
             deleteSlot: { [weak self] display in self?.deleteSlot(display) },
@@ -487,12 +470,19 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setKeepHostScaling: { [weak self] enabled in
                 self?.config.keepHostScaling = enabled
                 try? self?.config.save()
-            })
+            },
+            setDisableAudioStreaming: { [weak self] disabled in self?.toggleAudioStreaming(disabled: disabled) },
+            setLoginItem: { [weak self] enabled in self?.setLoginItem(enabled) },
+            restartAllInstances: { [weak self] in self?.restartAllInstances() },
+            resyncAll: { [weak self] in self?.resyncAll() })
+        model.diagnosticsProvider = { [weak self] completion in
+            self?.runDiagnostics(completion: completion)
+        }
     }
 
     private func openEdit(_ display: DisplayConfig) {
-        let streaming = ScreenWindowController.shared.model.summary(for: display.id)?.state == .streaming
-        ScreenWindowController.shared.openEdit(
+        let streaming = SettingsWindowController.shared.model.summary(for: display.id)?.state == .streaming
+        SettingsWindowController.shared.openEdit(
             display: display,
             streaming: streaming,
             others: config.displays,
@@ -503,7 +493,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func openAddScreen() {
         let autoName = Self.nextAutoName(used: Set(config.displays.map(\.name)))
-        ScreenWindowController.shared.openAdd(
+        SettingsWindowController.shared.openAdd(
             initialName: autoName,
             others: config.displays,
             onApply: { [weak self] candidate, reportError in
@@ -524,7 +514,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func setEnabled(_ display: DisplayConfig) {
+    private func setEnabled(_ display: DisplayConfig, fromMenu: Bool = false) {
         runBusy {
             do {
                 try ScreenChangeValidator.validate(display, others: self.config.displays)
@@ -534,8 +524,26 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try self.orchestrator?.setEnabled(display)
             } catch {
                 Log.error("启用/停用失败：\(error.localizedDescription)")
-                ScreenWindowController.shared.model.reportError(display.id, error.localizedDescription)
+                if fromMenu {
+                    // 菜单行切换失败：错误弹框（标题 = 动作、正文 = 原因）
+                    self.showMenuErrorAlert(display: display, message: error.localizedDescription)
+                } else {
+                    SettingsWindowController.shared.model.reportError(display.id, error.localizedDescription)
+                }
             }
+        }
+    }
+
+    /// 菜单行切换失败的错误弹框（错误反馈弹框，非确认弹窗）。
+    private func showMenuErrorAlert(display: DisplayConfig, message: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "\(display.enabled ? "启用" : "停用")「\(display.name)」失败"
+            alert.informativeText = message
+            alert.addButton(withTitle: "好")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
         }
     }
 
@@ -546,10 +554,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.config.displays.removeAll { $0.id == display.id }
                 try? self.config.save()
                 try? FileManager.default.removeItem(at: InstanceConf.directory(for: display.id))
-                ScreenWindowController.shared.closeEdit(slotID: display.id)
+                SettingsWindowController.shared.closeEdit(slotID: display.id)
             } catch {
                 Log.error("删除失败：\(error.localizedDescription)")
-                ScreenWindowController.shared.model.reportError(display.id, error.localizedDescription)
+                SettingsWindowController.shared.model.reportError(display.id, error.localizedDescription)
             }
         }
     }
@@ -571,6 +579,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     try self.orchestrator?.rebuild(newDisplay)
                 }
                 // 停用屏：只写配置，启用时按新规格生效
+                reportError(nil)   // 成功：关窗（与添加模式一致）
             } catch {
                 Log.error("应用修改失败：\(error.localizedDescription)")
                 reportError(error.localizedDescription)
@@ -639,11 +648,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return nil
     }
 
-    static func lanAddress() -> String? {
+    /// 全部有效 IPv4 地址（回环除外；物理网卡 en* 优先排序，去重保序）。
+    static func lanAddresses() -> [String] {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0 else { return nil }
+        guard getifaddrs(&ifaddr) == 0 else { return [] }
         defer { freeifaddrs(ifaddr) }
-        var fallback: String?
+        var physical: [String] = []
+        var others: [String] = []
+        var seen = Set<String>()
         var ptr = ifaddr
         while let current = ptr {
             let ifa = current.pointee
@@ -651,17 +663,19 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                 if getnameinfo(sa, socklen_t(sa.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
                     let ip = String(cString: host)
-                    if ip != "127.0.0.1" {
+                    if ip != "127.0.0.1", !seen.contains(ip) {
+                        seen.insert(ip)
                         if String(cString: ifa.ifa_name).hasPrefix("en") {
-                            return ip   // 优先物理网卡
+                            physical.append(ip)
+                        } else {
+                            others.append(ip)
                         }
-                        fallback = fallback ?? ip
                     }
                 }
             }
             ptr = current.pointee.ifa_next
         }
-        return fallback
+        return physical + others
     }
 
     /// 剪贴板写入（W1 IP 复制 / W3 凭据复制共用）。

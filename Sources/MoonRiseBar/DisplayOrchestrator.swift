@@ -137,6 +137,7 @@ final class DisplayOrchestrator {
         if display.sunshinePort == nil {
             let outcome = SunshineSync.sync(
                 outputName: displayID,
+                displayName: display.name,
                 config: config,
                 manager: primaryManager)
             syncStatus[display.id] = Self.syncText(outcome)

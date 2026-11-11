@@ -11,23 +11,24 @@ public enum SunshineSync {
         case failed(String)  // 其它失败（原因）
     }
 
-    /// 目标键值：output_name（虚拟屏）+ stream_audio（音频串流开关）
-    static func targetValues(outputName: UInt32, config: AppConfig) -> [String: String] {
+    /// 目标键值：output_name（虚拟屏）+ sunshine_name（对外屏名，与显示名一一对应）+ stream_audio（音频串流开关）
+    static func targetValues(outputName: UInt32, displayName: String, config: AppConfig) -> [String: String] {
         var values = ["output_name": String(outputName)]
+        values["sunshine_name"] = displayName
         values["stream_audio"] = config.sunshine.disableAudioStreaming ? "disabled" : "enabled"
         return values
     }
 
     /// 幂等联动入口。阻塞（可能重启服务 ~2s）：在后台队列调用。
     @discardableResult
-    public static func sync(outputName: UInt32, config: AppConfig, manager: SunshineManaging) -> Outcome {
+    public static func sync(outputName: UInt32, displayName: String, config: AppConfig, manager: SunshineManaging) -> Outcome {
         guard config.sunshine.autoConfigure else { return .unchanged }
         guard manager.detect() != nil else { return .notInstalled }
 
         do {
             switch try ConfFile.syncValues(
                 configPath: config.sunshine.configPath,
-                values: targetValues(outputName: outputName, config: config)) {
+                values: targetValues(outputName: outputName, displayName: displayName, config: config)) {
             case .unchanged:
                 // managed 语义下"配置正确"也要确保 Sunshine 在跑（start 幂等）
                 if case .managed = config.sunshine.restartPolicy {

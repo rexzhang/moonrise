@@ -112,6 +112,7 @@ final class PairingModel: ObservableObject {
 
 struct PairingView: View {
     let slotID: UUID
+    let screenName: String
     let webPort: Int
     let isPrimary: Bool
     let onClose: () -> Void
@@ -138,7 +139,7 @@ struct PairingView: View {
                     }
                 }
             case .primaryGuide:
-                Text("Moon 1 使用你自设的 Web UI 凭据，配对请到 Web UI 完成：")
+                Text("\(screenName) 使用你自设的 Web UI 凭据，配对请到 Web UI 完成：")
                     .font(.callout)
                 Text("1. 打开 \(webUIText)\n2. 登录后在「PIN」页输入客户端显示的 PIN")
                     .font(.callout)
