@@ -1,13 +1,6 @@
-// ListContentHeightKey.swift — 列表内容实测高度（驱动 W1 窗口高度）。
+// ListContentHeightKey.swift — 设置页面内容实测尺寸（驱动设置窗口高度）。
 
 import SwiftUI
-
-struct ListContentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
 
 /// 列表内容实测尺寸（宽高双向，驱动 W1 窗口大小）。
 struct ListContentSizeKey: PreferenceKey {

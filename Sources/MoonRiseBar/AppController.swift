@@ -1,5 +1,5 @@
 // AppController.swift — 菜单栏 App 主体：多屏编排接线、菜单栏状态与每屏开关、守护。
-// 菜单栏只做状态显示与快速开关；全部管理操作收敛于设置窗口（SettingsWindowController）。
+// 菜单栏只做状态显示与快速开关；全部管理操作收敛于设置窗口（SettingsCoordinator）。
 
 import AppKit
 import CoreGraphics
@@ -60,6 +60,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // SwiftUI 入口下的原 main.swift 职责：菜单栏 App 始终从附件形态启动
+        NSApp.setActivationPolicy(.accessory)
         menu.delegate = self
         menu.autoenablesItems = false
         statusItem.menu = menu
@@ -417,7 +419,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showSettings(page: SettingsPage? = nil) {
         wireScreenCallbacks()
         refreshScreenModel()
-        SettingsWindowController.shared.showSettings(page: page)
+        SettingsCoordinator.shared.showSettings(page: page)
     }
 
     private func refreshScreenModel() {
@@ -428,7 +430,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let login = loginItemStatus == .on
         let lan = Self.lanAddresses()
         DispatchQueue.main.async {
-            SettingsWindowController.shared.model.refresh(
+            SettingsCoordinator.shared.model.refresh(
                 displays: displays,
                 summaries: summaries,
                 keepHostScaling: keep,
@@ -439,7 +441,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func wireScreenCallbacks() {
-        let model = SettingsWindowController.shared.model
+        let model = SettingsCoordinator.shared.model
         model.callbacks = ScreenCallbacks(
             toggleEnabled: { [weak self] display, fromMenu in self?.setEnabled(display, fromMenu: fromMenu) },
             restartSlot: { [weak self] slotID in self?.restartSlot(slotID: slotID) },
@@ -448,12 +450,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     NSWorkspace.shared.open(url)
                 }
             },
-            openPairing: { display in
-                SettingsWindowController.shared.openPairing(display: display)
-            },
-            openEdit: { [weak self] display in self?.openEdit(display) },
             deleteSlot: { [weak self] display in self?.deleteSlot(display) },
-            openAdd: { [weak self] in self?.openAddScreen() },
+            applyEdit: { [weak self] candidate, reportError in
+                self?.applySlotEdit(candidate, reportError: reportError)
+            },
+            applyAdd: { [weak self] candidate, reportError in
+                self?.addScreen(candidate, reportError: reportError)
+            },
             setKeepHostScaling: { [weak self] enabled in
                 self?.config.keepHostScaling = enabled
                 try? self?.config.save()
@@ -490,27 +493,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func openEdit(_ display: DisplayConfig) {
-        let streaming = SettingsWindowController.shared.model.summary(for: display.id)?.state == .streaming
-        SettingsWindowController.shared.openEdit(
-            display: display,
-            streaming: streaming,
-            others: config.displays,
-            onApply: { [weak self] newDisplay, reportError in
-                self?.applySlotEdit(newDisplay, reportError: reportError)
-            })
-    }
-
-    private func openAddScreen() {
-        let autoName = Self.nextAutoName(used: Set(config.displays.map(\.name)))
-        SettingsWindowController.shared.openAdd(
-            initialName: autoName,
-            others: config.displays,
-            onApply: { [weak self] candidate, reportError in
-                self?.addScreen(candidate, reportError: reportError)
-            })
-    }
-
     // MARK: - 逐屏动作（W1/W2 即时应用；失败就地报错在卡片/窗口，无弹窗）
 
     private func restartSlot(slotID: UUID) {
@@ -538,7 +520,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     // 菜单行切换失败：错误弹框（标题 = 动作、正文 = 原因）
                     self.showMenuErrorAlert(display: display, message: error.localizedDescription)
                 } else {
-                    SettingsWindowController.shared.model.reportError(display.id, error.localizedDescription)
+                    SettingsCoordinator.shared.model.reportError(display.id, error.localizedDescription)
                 }
             }
         }
@@ -564,10 +546,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.config.displays.removeAll { $0.id == display.id }
                 try? self.config.save()
                 try? FileManager.default.removeItem(at: InstanceConf.directory(for: display.id))
-                SettingsWindowController.shared.closeEdit(slotID: display.id)
+                // 编辑窗口监听 displays 变化自动关闭（原 closeEdit 语义）
             } catch {
                 Log.error("删除失败：\(error.localizedDescription)")
-                SettingsWindowController.shared.model.reportError(display.id, error.localizedDescription)
+                SettingsCoordinator.shared.model.reportError(display.id, error.localizedDescription)
             }
         }
     }

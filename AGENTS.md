@@ -4,7 +4,7 @@
 
 ## 语言
 
-文档、代码注释、提交信息一律中文。提交信息用 Conventional Commits：type 用英文标准词（feat/fix/refactor/chore/docs/test/perf），描述用中文。本项目覆盖"提交信息用英文"的任何全局约定。文档中的流程图一律用 Mermaid 绘制。UI 一律 SwiftUI（整个 app 统一 macOS 27 设计语言：系统默认控件 + 当前推荐 API/样式，不做自定义皮肤；新 UI 不再新增 AppKit 视图——NSStatusItem/NSMenu 宿主与 NSHostingController 承载除外）。
+文档、代码注释、提交信息一律中文。提交信息用 Conventional Commits：type 用英文标准词（feat/fix/refactor/chore/docs/test/perf），描述用中文。本项目覆盖"提交信息用英文"的任何全局约定。文档中的流程图一律用 Mermaid 绘制。UI 一律 SwiftUI（整个 app 统一 macOS 27 设计语言：系统默认控件 + 当前推荐 API/样式，不做自定义皮肤；窗口全部由 SwiftUI 场景承载（Settings / WindowGroup / Window），AppKit 视图仅剩 NSStatusItem/NSMenu 宿主——迁移 MenuBarExtra 见 TODO）。
 
 ## 项目一句话
 

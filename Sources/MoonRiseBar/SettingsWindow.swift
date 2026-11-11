@@ -1,8 +1,9 @@
-// SettingsWindow.swift — MoonRise 设置窗口（SwiftUI）：侧边栏三页面（通用 / 屏幕 / 诊断，
-// macOS 系统设置风格）+ 屏幕修改 / 配对子窗口宿主。菜单栏「设置…」打开。
-// 窗口自动居中主屏、内容驱动高度（实测 + setFrame）；激活策略随窗口开关切换（.regular / .accessory）。
+// SettingsWindow.swift — MoonRise 设置窗口：SwiftUI Settings 场景承载（tab = 标准工具栏 tab），
+// 本文件含页面定义 / 状态模型 / 通用构件 / 四页面视图 / 场景窗口协调器（SettingsCoordinator：
+// 场景窗口登记与居中、内容驱动高度、激活策略随窗口开关切换 .regular / .accessory）。
 
 import AppKit
+import Combine
 import CoreServices
 import SwiftUI
 import MoonRiseCore
@@ -43,10 +44,11 @@ struct ScreenCallbacks {
     var toggleEnabled: ((DisplayConfig, Bool) -> Void)?
     var restartSlot: ((UUID) -> Void)?
     var openWebUI: ((Int) -> Void)?
-    var openPairing: ((DisplayConfig) -> Void)?
-    var openEdit: ((DisplayConfig) -> Void)?
     var deleteSlot: ((DisplayConfig) -> Void)?
-    var openAdd: (() -> Void)?
+    /// 应用修改（结果回调：非 nil = 失败原因就地报错；nil = 成功，窗口自行关闭）。
+    var applyEdit: ((DisplayConfig, @escaping (String?) -> Void) -> Void)?
+    /// 应用添加（结果回调语义同上；编号/命名/端口由 AppController 分配）。
+    var applyAdd: ((DisplayConfig, @escaping (String?) -> Void) -> Void)?
     var setKeepHostScaling: ((Bool) -> Void)?
     var setDisableAudioStreaming: ((Bool) -> Void)?
     var setLoginItem: ((Bool) -> Void)?
@@ -83,8 +85,17 @@ final class SettingsModel: ObservableObject {
     var diagnosticsProvider: ((@escaping ([DiagnosticsModel.CheckRow]) -> Void) -> Void)?
     /// 权限页数据源（AppController 提供，主线程采集）。
     var permissionProvider: (() -> PermissionStatusSnapshot?)?
-    /// 页面内容实测尺寸回调（驱动窗口高度 + 居中）。
-    var onContentSizeChanged: ((CGSize) -> Void)?
+    /// 当前页实测内容高度（页面直报；preference 不穿透 TabView，根视图据此定窗口高）。
+    @Published var pageContentHeight: CGFloat = 0
+
+    func reportContentSize(_ size: CGSize, for page: SettingsPage) {
+        guard size.height.isFinite, size.height > 0 else { return }
+        DispatchQueue.main.async { [weak self] in
+            // 只收当前页报告：切页瞬间旧页的迟到布局报告不得覆盖新页高度
+            guard self?.page == page else { return }
+            self?.pageContentHeight = size.height
+        }
+    }
 
     func refresh(displays: [DisplayConfig],
                  summaries: [AppController.ScreenSummary],
@@ -119,41 +130,64 @@ final class SettingsModel: ObservableObject {
     }
 }
 
-// MARK: - 宿主窗口
+// MARK: - 场景窗口协调器
 
-final class SettingsWindowController {
-    static let shared = SettingsWindowController()
+/// 设置 / 修改 / 添加 / 配对窗口均由 SwiftUI 场景创建，AppKit 侧负责登记与设置窗口尺寸：
+/// 场景窗口出现时打上 moonrise. 标识（激活策略判定与居中观察者靠它过滤）；设置窗口高度
+/// 跟随当前页实测内容（Settings 场景窗口不随内容理想尺寸重排，须 setFrame）；最后一个
+/// 窗口关闭后回到纯菜单栏形态。
+final class SettingsCoordinator {
+    static let shared = SettingsCoordinator()
     let model = SettingsModel()
-    private let settingsWindow: NSWindow
-    private var editWindows: [UUID: NSWindow] = [:]
-    private var pairingWindows: [UUID: NSWindow] = [:]
+    private weak var settingsWindow: NSWindow?
     private var observers: [NSObjectProtocol] = []
-    private var appliedContentHeight: CGFloat = 0
+    private var heightCancellables: Set<AnyCancellable> = []
+    /// 待直达页：场景窗口有 tab 记忆恢复，页赋值须等窗口出现后（恢复之后）才生效。
+    private var pendingPage: SettingsPage?
 
-    init() {
-        settingsWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 420),
-            styleMask: [.titled, .closable],
-            backing: .buffered, defer: false)
-        settingsWindow.title = "MoonRise 设置"
-        settingsWindow.identifier = NSUserInterfaceItemIdentifier("moonrise.settings")
-        settingsWindow.isReleasedWhenClosed = false
-        settingsWindow.backgroundColor = NSColor.windowBackgroundColor
-        let hosting = NSHostingController(rootView: SettingsRootView(model: model))
-        hosting.sizingOptions = []
-        // 用 contentView 挂载（不用 contentViewController——后者会让窗口采用
-        // hosting 的 preferredContentSize，sizingOptions 为空时是 0×28，窗口塌缩）
-        settingsWindow.contentView = hosting.view
-        model.onContentSizeChanged = { [weak self] size in
-            self?.setWindowSizeAndCenter(size)
-        }
-        // 项目 UI 标准：窗口尺寸变化（内容驱动）后自动居中。
+    private init() {
+        // 设置窗口高度跟随页内容（页切换 / 行内内容变化）
+        model.$pageContentHeight
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.syncSettingsWindowSize() }
+            .store(in: &heightCancellables)
+        // 场景窗口可见时登记：SwiftUI 场景窗口自带 identifier，不能靠 nil 判定——
+        // 设置窗口未在显示时，首个新出现的 titled 窗口即设置窗口；其余未带 moonrise.
+        // 标识的一律归为场景子窗口（子窗口只可能从设置页打开，时序无歧义）。
+        observers.append(NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self, let window = note.object as? NSWindow,
+                  window.occlusionState.contains(.visible),
+                  window.styleMask.contains(.titled) else { return }
+            if window !== self.settingsWindow, self.settingsWindow?.isVisible != true {
+                window.identifier = NSUserInterfaceItemIdentifier("moonrise.settings")
+                self.settingsWindow = window
+                centerOnMainScreen(window)
+                self.syncSettingsWindowSize()
+                if let page = self.pendingPage {
+                    self.pendingPage = nil
+                    self.model.page = page
+                    // 场景 tab 记忆恢复晚于窗口出现时会在恢复时覆盖 selection——再补一次
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                        self?.model.page = page
+                    }
+                }
+                return
+            }
+            if window.identifier?.rawValue.hasPrefix("moonrise.") != true {
+                window.identifier = NSUserInterfaceItemIdentifier("moonrise.scene")
+                centerOnMainScreen(window)
+            }
+        })
+        // 项目 UI 标准：窗口尺寸变化（内容驱动）后自动居中（用户改宽的设置窗口不干预）。
         observers.append(NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: nil, queue: .main
-        ) { note in
+        ) { [weak self] note in
             guard let window = note.object as? NSWindow,
-                  let id = window.identifier?.rawValue,
-                  id.hasPrefix("moonrise.") else { return }
+                  window.identifier?.rawValue.hasPrefix("moonrise.") == true,
+                  window.isVisible else { return }
+            if window === self?.settingsWindow, abs(window.frame.width - 780) > 1 { return }
             centerOnMainScreen(window)
         })
         // 最后一个 MoonRise 窗口关闭 → 回到纯菜单栏形态（.accessory）。
@@ -173,28 +207,60 @@ final class SettingsWindowController {
     }
 
     func showSettings(page: SettingsPage? = nil) {
-        if let page {
-            model.page = page
-        }
         NSApp.setActivationPolicy(.regular)
-        settingsWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if let settingsWindow, settingsWindow.isVisible {
+            if let page {
+                model.page = page
+            }
+            settingsWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        pendingPage = page
+        openSettingsScene()
     }
 
-    /// 窗口尺寸 = 设计定宽 + 实测内容高度（+ 标题栏与页面边距），钳制后设框并居中主屏。
-    private func setWindowSizeAndCenter(_ contentSize: CGSize) {
-        guard contentSize.height.isFinite, contentSize.height > 0 else { return }
+    /// 设置窗口尺寸 = 设计定宽 780 + 当前页实测高（+ 标题栏与工具栏 tab 条 80），钳制后居中。
+    private func syncSettingsWindowSize() {
+        guard let settingsWindow else { return }
         let visible = primaryVisibleFrame()
+        // 80 = 标题栏 + 工具栏 tab 条（macOS 27 工具栏 tab 实测）
+        let targetHeight = min(max(model.pageContentHeight, 300) + 80, max(320, visible.height - 40))
         let targetWidth: CGFloat = 780
-        // 72 = 标题栏 + TabView tab 条（macOS 15+ 标准渲染；分段回退时 tab 条计入内容实测）
-        let targetHeight = min(max(contentSize.height + 72, 320), max(320, visible.height - 24))
-        guard abs(targetHeight - appliedContentHeight) > 1 else { return }
-        appliedContentHeight = targetHeight
-        var frame = settingsWindow.frame
-        frame.size = NSSize(width: targetWidth, height: targetHeight)
-        frame.origin.x = visible.midX - targetWidth / 2
-        frame.origin.y = visible.midY - targetHeight / 2
-        settingsWindow.setFrame(frame, display: true, animate: false)
+        let frame = settingsWindow.frame
+        guard abs(targetHeight - frame.height) > 1 || abs(targetWidth - frame.width) > 1 else { return }
+        var target = frame
+        target.size = NSSize(width: targetWidth, height: targetHeight)
+        target.origin.x = visible.midX - targetWidth / 2
+        target.origin.y = visible.midY - targetHeight / 2
+        settingsWindow.setFrame(target, display: true, animate: false)
+    }
+
+    /// 打开 Settings 场景窗口：SwiftUI 把打开命令挂在其自动安装的主菜单命令上
+    /// （macOS 14 起为 showSettingsWindow:，13 为 showPreferencesWindow:——双选择器尝试，
+    /// 再退主菜单扫描）。
+    private func openSettingsScene() {
+        let actions = [Selector(("showSettingsWindow:")), Selector(("showPreferencesWindow:"))]
+        for action in actions where NSApp.sendAction(action, to: nil, from: nil) {
+            return
+        }
+        if let item = actions.lazy.compactMap(Self.findMenuItem).first,
+           let action = item.action {
+            NSApp.sendAction(action, to: item.target, from: item)
+            return
+        }
+        Log.error("设置场景窗口打开失败：主菜单无 Settings 命令")
+    }
+
+    private static func findMenuItem(action: Selector) -> NSMenuItem? {
+        func walk(_ menu: NSMenu) -> NSMenuItem? {
+            for item in menu.items {
+                if item.action == action { return item }
+                if let submenu = item.submenu, let hit = walk(submenu) { return hit }
+            }
+            return nil
+        }
+        return NSApp.mainMenu.flatMap { walk($0) }
     }
 
     /// 任一 MoonRise 窗口可见期间保持常规 App 形态，全部关闭后回到纯菜单栏形态。
@@ -212,151 +278,7 @@ final class SettingsWindowController {
         }
     }
 
-    // MARK: - 修改窗口（复用置前）
-
-    /// 修改窗口。onApply 的第二参为结果回调：非 nil = 失败就地报错；nil = 成功关窗。
-    func openEdit(display: DisplayConfig, streaming: Bool, others: [DisplayConfig],
-                  onApply: @escaping (DisplayConfig, @escaping (String?) -> Void) -> Void) {
-        if let existing = editWindows[display.id] {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 120),
-            styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "修改屏幕 — \(display.name)"
-        window.identifier = NSUserInterfaceItemIdentifier("moonrise.edit.\(display.id.uuidString)")
-        window.isReleasedWhenClosed = false
-        let close = { [weak window, weak self] in
-            window?.close()
-            self?.editWindows[display.id] = nil
-        }
-        var editView = ScreenEditView(
-            mode: .edit(display),
-            streaming: streaming,
-            others: others.filter { $0.id != display.id },
-            onApply: { newDisplay, reportError in
-                onApply(newDisplay) { errorMessage in
-                    // 结果回到主线程：@State 更新与窗口关闭都要求主线程
-                    DispatchQueue.main.async {
-                        if let errorMessage {
-                            reportError(errorMessage)
-                        } else {
-                            close()
-                        }
-                    }
-                }
-            },
-            onClose: close)
-        editView.onContentHeight = { [weak self, weak window] contentHeight in
-            self?.setSubwindowSize(window, contentHeight: contentHeight, minWidth: 450)
-        }
-        window.contentViewController = NSHostingController(rootView: editView)
-        editWindows[display.id] = window
-        present(window)
-    }
-
-    func closeEdit(slotID: UUID) {
-        editWindows[slotID]?.close()
-        editWindows[slotID] = nil
-    }
-
-    /// 添加模式窗口（单例复用）。
-    private var addWindow: NSWindow?
-    func openAdd(initialName: String, others: [DisplayConfig],
-                 onApply: @escaping (DisplayConfig, @escaping (String?) -> Void) -> Void) {
-        if let existing = addWindow {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 120),
-            styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "添加屏幕"
-        window.identifier = NSUserInterfaceItemIdentifier("moonrise.add")
-        window.isReleasedWhenClosed = false
-        let close = { [weak window, weak self] in
-            window?.close()
-            self?.addWindow = nil
-        }
-        var addView = ScreenEditView(
-            mode: .add(initialName: initialName),
-            streaming: false,
-            others: others,
-            onApply: { newDisplay, reportError in
-                onApply(newDisplay) { errorMessage in
-                    DispatchQueue.main.async {
-                        if let errorMessage {
-                            reportError(errorMessage)
-                        } else {
-                            close()
-                        }
-                    }
-                }
-            },
-            onClose: close)
-        addView.onContentHeight = { [weak self, weak window] contentHeight in
-            self?.setSubwindowSize(window, contentHeight: contentHeight, minWidth: 450)
-        }
-        window.contentViewController = NSHostingController(rootView: addView)
-        addWindow = window
-        present(window)
-    }
-
-    /// 配对窗口（复用置前）。
-    func openPairing(display: DisplayConfig) {
-        if let existing = pairingWindows[display.id] {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 140),
-            styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "配对 — \(display.name)"
-        window.identifier = NSUserInterfaceItemIdentifier("moonrise.pairing.\(display.id.uuidString)")
-        window.isReleasedWhenClosed = false
-        let webPort = (display.sunshinePort ?? 47989) + 1
-        var pairingView = PairingView(
-            slotID: display.id,
-            screenName: display.name,
-            webPort: webPort,
-            isPrimary: display.sunshinePort == nil,
-            onClose: { [weak window, weak self] in
-                window?.close()
-                self?.pairingWindows[display.id] = nil
-            })
-        pairingView.onContentHeight = { [weak self, weak window] contentHeight in
-            self?.setSubwindowSize(window, contentHeight: contentHeight, minWidth: 350)
-        }
-        window.contentViewController = NSHostingController(rootView: pairingView)
-        pairingWindows[display.id] = window
-        present(window)
-    }
-
-    /// 子窗口前置 + 常规 App 形态。
-    private func present(_ window: NSWindow) {
-        NSApp.setActivationPolicy(.regular)
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    /// 子窗口高度 = 实测内容高度（+28 标题栏），钳制后设框并居中主屏。
-    private func setSubwindowSize(_ window: NSWindow?, contentHeight: CGFloat, minWidth: CGFloat) {
-        guard let window, window.isVisible, contentHeight.isFinite, contentHeight >= 0 else { return }
-        let visible = primaryVisibleFrame()
-        let target = min(max(contentHeight + 28, 280), max(280, visible.height - 24))
-        var frame = window.frame
-        frame.size.width = max(frame.width, minWidth)
-        guard abs(frame.height - target) > 1 else { return }
-        frame.origin.x = visible.midX - frame.size.width / 2
-        frame.origin.y = visible.midY - target / 2
-        frame.size.height = target
-        window.setFrame(frame, display: true, animate: false)
-    }
+    // 修改 / 添加 / 配对窗口由 MoonRiseApp.swift 的 WindowGroup / Window 场景承载。
 }
 
 // MARK: - 布局助手
@@ -376,9 +298,9 @@ func primaryVisibleFrame() -> NSRect {
     return primary?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1055)
 }
 
-/// 页面内容实测尺寸上报（驱动设置窗口高度）。
+/// 页面内容实测尺寸注入（根视图按 preference 定高；页面自用回调可选）。
 struct ContentSizeReporter: ViewModifier {
-    let onChange: (CGSize) -> Void
+    var onChange: ((CGSize) -> Void)? = nil
 
     func body(content: Content) -> some View {
         content
@@ -388,17 +310,29 @@ struct ContentSizeReporter: ViewModifier {
                 }
             )
             .onPreferenceChange(ListContentSizeKey.self) { size in
-                onChange(size)
+                onChange?(size)
             }
     }
 }
 
-// MARK: - 根视图（SwiftUI 标准 TabView + Tab；页面内容实测上报驱动窗口高度）
+// MARK: - 根视图（SwiftUI 标准 TabView + Tab；定宽 780，高度 = 当前页实测内容，钳屏高）
 
 struct SettingsRootView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
+        tabs
+            .frame(width: 780, height: framedHeight)
+    }
+
+    /// 页高钳制：下限 300 防塌缩，上限 = 主屏可视高 - 标题栏与 tab 条余量。
+    private var framedHeight: CGFloat {
+        let maxVisible = primaryVisibleFrame().height - 110
+        return min(max(model.pageContentHeight, 300), max(300, maxVisible))
+    }
+
+    @ViewBuilder
+    private var tabs: some View {
         if #available(macOS 15.0, *) {
             TabView(selection: $model.page) {
                 Tab("通用", systemImage: "gearshape", value: .general) {
@@ -415,27 +349,19 @@ struct SettingsRootView: View {
                 }
             }
         } else {
-            VStack(spacing: 0) {
-                Picker("", selection: $model.page) {
-                    ForEach(SettingsPage.allCases) { page in
-                        Label(page.title, systemImage: page.symbol).tag(page)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.large)
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
-
-                ScrollView {
-                    switch model.page {
-                    case .general: GeneralPageView(model: model)
-                    case .screens: ScreensPageView(model: model)
-                    case .permission: PermissionPageView(model: model)
-                    case .diagnostics: DiagnosticsPageView(model: model)
-                    }
-                }
+            TabView(selection: $model.page) {
+                GeneralPageView(model: model)
+                    .tabItem { Label("通用", systemImage: "gearshape") }
+                    .tag(SettingsPage.general)
+                ScreensPageView(model: model)
+                    .tabItem { Label("屏幕管理", systemImage: "rectangle.on.rectangle") }
+                    .tag(SettingsPage.screens)
+                PermissionPageView(model: model)
+                    .tabItem { Label("权限", systemImage: "lock.shield") }
+                    .tag(SettingsPage.permission)
+                DiagnosticsPageView(model: model)
+                    .tabItem { Label("诊断", systemImage: "stethoscope") }
+                    .tag(SettingsPage.diagnostics)
             }
         }
     }
@@ -526,7 +452,7 @@ struct GeneralPageView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .modifier(ContentSizeReporter { size in model.onContentSizeChanged?(size) })
+        .modifier(ContentSizeReporter { size in model.reportContentSize(size, for: .general) })
     }
 
     private var keepBinding: Binding<Bool> {
@@ -561,12 +487,13 @@ struct GeneralPageView: View {
 
 struct ScreensPageView: View {
     @ObservedObject var model: SettingsModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ipSection
             HStack {
-                Button("添加屏幕…") { model.callbacks.openAdd?() }
+                Button("添加屏幕…") { openWindow(id: "moonrise.add") }
                     .buttonStyle(.borderedProminent)
                 Spacer()
                 Text("状态每秒自动刷新")
@@ -582,13 +509,14 @@ struct ScreensPageView: View {
                     display: display,
                     summary: model.summary(for: display.id),
                     error: model.errors[display.id],
-                    callbacks: model.callbacks)
+                    callbacks: model.callbacks,
+                    openWindow: openWindow)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .modifier(ContentSizeReporter { size in model.onContentSizeChanged?(size) })
+        .modifier(ContentSizeReporter { size in model.reportContentSize(size, for: .screens) })
     }
 
     /// 公共信息：本机全部有效 IPv4（多屏共用，只展示）。
@@ -634,6 +562,7 @@ private struct ScreenCard: View {
     let summary: AppController.ScreenSummary?
     let error: String?
     let callbacks: ScreenCallbacks
+    let openWindow: OpenWindowAction
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -658,7 +587,8 @@ private struct ScreenCard: View {
         HStack {
             statePill
             Text(display.name).fontWeight(.semibold)
-            Text("端口 \(display.sunshinePort ?? 47989)")
+            // String 显式转换：插值走本地化格式会给 5 位端口加千分位（D11 无千分位）
+            Text("端口 \(String(display.sunshinePort ?? 47989))")
                 .foregroundColor(.secondary)
                 .font(.caption)
             Spacer()
@@ -687,9 +617,9 @@ private struct ScreenCard: View {
                 .disabled(!display.enabled)
             Button("Web UI") { callbacks.openWebUI?((display.sunshinePort ?? 47989) + 1) }
                 .disabled(!display.enabled)
-            Button("配对…") { callbacks.openPairing?(display) }
+            Button("配对…") { openWindow(id: "moonrise.pairing", value: display.id) }
                 .disabled(!display.enabled)
-            Button("修改…") { callbacks.openEdit?(display) }
+            Button("修改…") { openWindow(id: "moonrise.edit", value: display.id) }
             Button("删除（销屏并清理）") { callbacks.deleteSlot?(display) }
                 .foregroundColor(.red)
                 .disabled(display.sunshinePort == nil)
@@ -767,7 +697,7 @@ struct DiagnosticsPageView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .modifier(ContentSizeReporter { size in model.onContentSizeChanged?(size) })
+        .modifier(ContentSizeReporter { size in model.reportContentSize(size, for: .diagnostics) })
         .task { reload() }
     }
 
@@ -841,7 +771,7 @@ struct PermissionPageView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .modifier(ContentSizeReporter { size in model.onContentSizeChanged?(size) })
+        .modifier(ContentSizeReporter { size in model.reportContentSize(size, for: .permission) })
         .onAppear { refresh() }
         .onReceive(heartbeat) { _ in refresh() }
     }

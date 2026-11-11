@@ -1,4 +1,5 @@
-// ScreenEditWindow.swift — 屏幕修改窗口（SwiftUI）：修改 / 添加双模式。
+// ScreenEditWindow.swift — 屏幕修改视图（SwiftUI）：修改 / 添加双模式，
+// 由 MoonRiseApp.swift 的 WindowGroup / Window 场景承载（窗口尺寸随内容自适应）。
 // 预设下拉（分组，HiDPI 标记为文字）联动填充；应用 = 校验 → rebuild / create；无删除（在设置窗口屏幕页）。
 
 import AppKit
@@ -20,8 +21,6 @@ struct ScreenEditView: View {
     /// 应用回调：第二参为就地报错（非 nil = 失败，窗口保持）。
     let onApply: (DisplayConfig, @escaping (String?) -> Void) -> Void
     let onClose: () -> Void
-    /// 内容高度实测回调（宿主窗口据此自动调整大小并居中）。
-    var onContentHeight: ((CGFloat) -> Void)?
 
     @State private var name: String
     @State private var width: Int
@@ -145,14 +144,6 @@ struct ScreenEditView: View {
         }
         .padding(16)
         .frame(width: 450)
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(key: ListContentHeightKey.self, value: geo.size.height)
-            }
-        )
-        .onPreferenceChange(ListContentHeightKey.self) { height in
-            onContentHeight?(height)
-        }
     }
 
     private func presetTag(_ preset: DisplayPreset) -> some View {

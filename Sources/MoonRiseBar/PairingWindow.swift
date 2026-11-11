@@ -116,8 +116,6 @@ struct PairingView: View {
     let webPort: Int
     let isPrimary: Bool
     let onClose: () -> Void
-    /// 内容高度实测回调（宿主窗口据此自动调整大小并居中）。
-    var onContentHeight: ((CGFloat) -> Void)?
 
     @StateObject private var model = PairingModel()
 
@@ -191,14 +189,6 @@ struct PairingView: View {
         }
         .padding(16)
         .frame(width: 350, alignment: .leading)
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(key: ListContentHeightKey.self, value: geo.size.height)
-            }
-        )
-        .onPreferenceChange(ListContentHeightKey.self) { height in
-            onContentHeight?(height)
-        }
         .task {
             model.start(slotID: slotID, webPort: webPort, isPrimary: isPrimary)
         }

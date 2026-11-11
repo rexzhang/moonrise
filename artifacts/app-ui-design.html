@@ -161,7 +161,7 @@ footer { margin-top: 72px; color: var(--muted); font-size: 13px; }
 <header class="masthead">
   <p class="eyebrow">MOONRISE · UI 交互设计</p>
   <h1>设置窗口与菜单栏 · 交互规格</h1>
-  <p class="lede">菜单栏极简：状态聚合 + 每屏开关行（失败弹框）+ 设置入口。「MoonRise 设置」为侧边栏式标准窗口（参考 macOS 系统设置）——通用 / 屏幕 / 诊断三个页面，修改与配对保留独立子窗口，权限引导为四步检查单。全部 SwiftUI 系统默认控件（macOS 27 兼容推荐样式），无确认弹窗，后果写在控件文案。</p>
+  <p class="lede">菜单栏极简：状态聚合 + 每屏开关行（失败弹框）+ 设置入口。「MoonRise 设置」为 SwiftUI Settings 场景标准窗口——顶部工具栏 tab 四页（通用 / 屏幕管理 / 权限 / 诊断，图标 + 文字），修改与配对保留独立子窗口，权限引导为四步检查单。全部 SwiftUI 系统默认控件（macOS 27 兼容推荐样式），无确认弹窗，后果写在控件文案。</p>
   <div class="legend">
     <span><b>图例</b></span>
     <span>圆角矩形 = 步骤 / 窗口</span>
@@ -235,7 +235,7 @@ flowchart TD
 
 <section>
   <div class="sec-head"><span class="sec-no">S3</span><h2>设置窗口框架</h2></div>
-  <p class="sec-desc">标准窗口「MoonRise 设置」，页面 tab 在窗口顶部（SwiftUI 标准 TabView + Tab），下方为内容区。内容驱动高度——页面切换与内容变化时窗口高度实时跟随并自动居中主屏；不可手动拖拽调整。打开时 App 切换为常规激活（Dock 图标 + App 菜单），关闭最后一个窗口后回到纯菜单栏形态。</p>
+  <p class="sec-desc">SwiftUI Settings 场景标准窗口「MoonRise 设置」，顶部工具栏 tab（macOS 27 标准样式，图标 + 文字 + 系统选中态），下方为内容区。窗口定宽 780，高度随页内容自适应并自动居中主屏；系统记忆上次选中的页。打开时 App 切换为常规激活（Dock 图标 + App 菜单），关闭最后一个窗口后回到纯菜单栏形态。修改 / 配对子窗口由 WindowGroup 场景按屏承载（同屏重复打开自动聚焦既有窗口），添加窗口为 Window 单例；子窗口尺寸随内容自适应。</p>
   <div class="macwin" style="max-width:640px">
     <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
     <div class="tabs">
