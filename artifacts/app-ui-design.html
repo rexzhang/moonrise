@@ -318,7 +318,7 @@ flowchart LR
 
 <section>
   <div class="sec-head"><span class="sec-no">S5</span><h2>屏幕管理页面</h2></div>
-  <p class="sec-desc">顶部公共信息区（本机全部有效 IPv4，只展示、无复制交互，多屏共用）+「添加屏幕…」+ 每屏一张卡片：只读信息（状态胶囊 / 端口标签 / 规格行 / 同步状态）+ 内联控件。行内动作失败就地报错，保留至下次动作或 5s；停用卡片降透明；首屏不可删除。状态每秒自动刷新。Moonlight 侧连接引导：手动添加 IP:端口 的条目显示屏名；自动发现条目固定显示机器名（Sunshine 上游 mDNS 行为，与 App 无关）。</p>
+  <p class="sec-desc">顶部公共信息区（本机全部有效 IPv4，只展示、无复制交互，多屏共用）+「添加屏幕…」+ 每屏一张卡片：只读信息（状态胶囊 / 端口标签 / 规格行 / 同步状态）+ 内联控件。行内动作失败就地报错，保留至下次动作或 5s；停用卡片降透明；首屏不可删除。状态每秒自动刷新。Moonlight 侧条目名 = serverinfo hostname = sunshine_name（屏名），自动发现与手动添加一致，实例重启后经客户端轮询刷新。</p>
   <div class="macwin" style="max-width:640px">
     <div class="winbar"><span class="wdots"><span></span><span></span><span></span></span>MoonRise 设置</div>
     <div class="tabs">
