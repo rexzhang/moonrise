@@ -86,13 +86,16 @@ public struct AppConfig: Codable, Equatable, Sendable {
         public var disableAudioStreaming: Bool
         /// 隐藏 Sunshine 的菜单栏托盘图标（QT_QPA_PLATFORM=minimal），默认开启
         public var hideTrayIcon: Bool
+        /// 主实例二进制路径覆盖（nil = brew 自动探测）；扩展屏实例副本随之刷新
+        public var binaryPath: String?
 
-        public init(autoConfigure: Bool = true, configPath: String = "~/.config/sunshine/sunshine.conf", restartPolicy: RestartPolicy = .managed, disableAudioStreaming: Bool = true, hideTrayIcon: Bool = true) {
+        public init(autoConfigure: Bool = true, configPath: String = "~/.config/sunshine/sunshine.conf", restartPolicy: RestartPolicy = .managed, disableAudioStreaming: Bool = true, hideTrayIcon: Bool = true, binaryPath: String? = nil) {
             self.autoConfigure = autoConfigure
             self.configPath = configPath
             self.restartPolicy = restartPolicy
             self.disableAudioStreaming = disableAudioStreaming
             self.hideTrayIcon = hideTrayIcon
+            self.binaryPath = binaryPath
         }
 
         public init(from decoder: Decoder) throws {
@@ -102,6 +105,7 @@ public struct AppConfig: Codable, Equatable, Sendable {
             restartPolicy = try c.decodeIfPresent(RestartPolicy.self, forKey: .restartPolicy) ?? .managed
             disableAudioStreaming = try c.decodeIfPresent(Bool.self, forKey: .disableAudioStreaming) ?? true
             hideTrayIcon = try c.decodeIfPresent(Bool.self, forKey: .hideTrayIcon) ?? true
+            binaryPath = try c.decodeIfPresent(String.self, forKey: .binaryPath)
         }
     }
 

@@ -4,7 +4,9 @@ import Darwin
 
 /// 扩展屏 Sunshine 实例的文件布局、conf 键集与端口分配（D1/D3/D4/D16）。
 /// 实例目录：~/.config/moonrise/sunshine-instances/<槽位UUID>/
-///   sunshine.conf / bin/sunshine（独立二进制副本）/ credentials/（独立 CA + 配对状态）
+///   sunshine.conf / bin/（独立可执行副本：brew 源为裸二进制 sunshine，
+///   官方 .app 源为整 bundle 副本——带启动约束的二进制离开 bundle 即被 SIGKILL）
+///   / credentials/（独立 CA + 配对状态）
 public enum InstanceConf {
     // MARK: - 文件布局
 
@@ -142,10 +144,38 @@ public enum InstanceConf {
 
     // MARK: - 二进制副本（D16：同一路径并发捕获被 macOS 27 串行化，实例必须独立路径）
 
-    /// 复制源二进制到实例 bin/sunshine；副本已存在且 SHA-256 与源一致则不动，
-    /// 不一致（brew 升级后）则刷新。调用方据此在需要时重启该实例。
+    /// 源二进制的宿主 .app bundle（源位于 <bundle>/Contents/MacOS/ 内时返回该 bundle URL）。
+    /// 上游官方 Sunshine.app 的二进制带启动约束（锚定自身 bundle 身份）——裸拷贝在
+    /// bundle 外 exec 即被 SIGKILL（2026-11-12 实测），此类源必须整 bundle 副本。
+    public static func hostAppBundle(of binaryPath: String) -> URL? {
+        var url = URL(fileURLWithPath: binaryPath)
+        for _ in 0..<4 {
+            url.deleteLastPathComponent()
+            if url.pathExtension == "app" {
+                let standardized = (url.path as NSString).standardizingPath
+                return URL(fileURLWithPath: standardized)
+            }
+        }
+        return nil
+    }
+
+    /// 实例内 bundle 副本路径：<实例>/bin/<源 bundle 名>。
+    public static func appBundleCopyURL(for slotID: UUID, bundleName: String) -> URL {
+        directory(for: slotID).appendingPathComponent("bin").appendingPathComponent(bundleName)
+    }
+
+    /// 确保实例持有与源一致的独立可执行副本，返回可执行文件路径。
+    /// 裸二进制源（brew）→ bin/sunshine；bundle 内的源（官方 .app）→ 整 bundle 副本。
+    /// 副本已存在且 SHA-256 与源一致则不动，不一致（源升级后）则刷新。
+    /// 调用方据此在需要时重启该实例；须在实例未运行时调用。
     @discardableResult
     public static func ensureBinaryCopy(sourceBinaryPath: String, slotID: UUID) throws -> URL {
+        if let sourceBundle = hostAppBundle(of: sourceBinaryPath) {
+            return try ensureAppBundleCopy(
+                sourceBinaryPath: sourceBinaryPath,
+                sourceBundle: sourceBundle,
+                slotID: slotID)
+        }
         let destination = binaryURL(for: slotID)
         try Paths.ensureParentDirectory(of: destination)
         let fm = FileManager.default
@@ -161,6 +191,38 @@ public enum InstanceConf {
         try fm.copyItem(atPath: sourceBinaryPath, toPath: destination.path)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
         return destination
+    }
+
+    /// 整 bundle 副本：以源内层二进制的 SHA-256 为新鲜度锚点，不一致则递归刷新整个副本；
+    /// 顺带清理裸二进制旧布局（bin/sunshine，仅实例未运行时可达此处）。
+    private static func ensureAppBundleCopy(sourceBinaryPath: String, sourceBundle: URL, slotID: UUID) throws -> URL {
+        let destinationBundle = appBundleCopyURL(for: slotID, bundleName: sourceBundle.lastPathComponent)
+        let sourceExecutable = URL(fileURLWithPath: sourceBinaryPath)
+        guard sourceExecutable.path.hasPrefix(sourceBundle.path + "/") else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let relativePath = String(sourceExecutable.path.dropFirst(sourceBundle.path.count + 1))
+        let destinationExecutable = destinationBundle.appendingPathComponent(relativePath)
+        let fm = FileManager.default
+        let sourceHash = try sha256(of: sourceBinaryPath)
+        if fm.fileExists(atPath: destinationExecutable.path),
+           let destinationHash = try? sha256(of: destinationExecutable.path),
+           destinationHash == sourceHash {
+            removeLeftoverBareBinaryCopy(slotID: slotID)
+            return destinationExecutable
+        }
+        if fm.fileExists(atPath: destinationBundle.path) {
+            try fm.removeItem(at: destinationBundle)
+        }
+        try Paths.ensureParentDirectory(of: destinationBundle)
+        try fm.copyItem(atPath: sourceBundle.path, toPath: destinationBundle.path)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destinationExecutable.path)
+        removeLeftoverBareBinaryCopy(slotID: slotID)
+        return destinationExecutable
+    }
+
+    private static func removeLeftoverBareBinaryCopy(slotID: UUID) {
+        try? FileManager.default.removeItem(at: binaryURL(for: slotID))
     }
 
     static func sha256(of path: String) throws -> String {

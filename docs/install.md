@@ -11,6 +11,7 @@
    brew install lizardbyte/homebrew/sunshine
    brew pin sunshine   # 避免自动升级打断
    ```
+   推荐（替代 brew）：改用官方 Sunshine.app（≥2026.1112，自带 ScreenCaptureKit 捕获，修复 macOS 27 的串屏与断连，spike S8）——安装到 /Applications 后在 ~/.config/moonrise/config.json 的 sunshine 段加 `"binaryPath" : "/Applications/Sunshine.app/Contents/MacOS/sunshine"`，并保持该段 `"hideTrayIcon" : false`（官方包 Qt 无 minimal 插件）。扩展屏实例副本会自动按整 bundle 刷新。
 3. Clone 本仓库后，构建并安装（详见 docs/development.md）：
    ```bash
    bash scripts/make-cert.sh --trust   # 一次性：生成自签证书（弹框点"始终信任"）

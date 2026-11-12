@@ -46,7 +46,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 生命周期
 
     override init() {
-        if let binPath = BrewServicesSunshineManager.detectBinary() {
+        if let binPath = Self.resolvePrimaryBinaryPath(config) {
             sunshineManager = ChildProcessSunshineManager(
                 binPath: binPath,
                 confPath: Paths.expandTilde(config.sunshine.configPath),
@@ -57,6 +57,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             sunshineManager = BrewServicesSunshineManager(brewPath: brewPath)
         }
         super.init()
+    }
+
+    /// 主实例二进制路径：配置覆盖优先（须为可执行文件），否则 brew 探测。
+    private static func resolvePrimaryBinaryPath(_ config: AppConfig) -> String? {
+        if let override = config.sunshine.binaryPath {
+            let expanded = Paths.expandTilde(override)
+            if FileManager.default.isExecutableFile(atPath: expanded) {
+                return expanded
+            }
+            Log.error("sunshine.binaryPath 不可执行，回退 brew 探测：\(expanded)")
+        }
+        return BrewServicesSunshineManager.detectBinary()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -71,7 +83,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             do {
                 let controller = try VirtualDisplayController()
                 let registry = SunshineInstanceRegistry(
-                    sourceBinaryPath: BrewServicesSunshineManager.detectBinary() ?? "",
+                    sourceBinaryPath: Self.resolvePrimaryBinaryPath(self.config) ?? "",
                     hideTrayIcon: self.config.sunshine.hideTrayIcon)
                 let orchestrator = DisplayOrchestrator(
                     controller: controller,

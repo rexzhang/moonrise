@@ -79,6 +79,41 @@ final class InstanceConfTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: copied1, encoding: .utf8), "v2-with-longer-content")
     }
 
+    func testAppBundleCopyReturnsInnerExecutableAndCleansLegacyLayout() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let slotID = UUID()
+
+        // 伪造源 bundle：<dir>/App.app/Contents/MacOS/sunshine
+        let sourceBundle = dir.appendingPathComponent("Src.app")
+        let sourceExecutable = sourceBundle
+            .appendingPathComponent("Contents/MacOS/sunshine")
+        try FileManager.default.createDirectory(
+            at: sourceExecutable.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try "app-v1".write(to: sourceExecutable, atomically: true, encoding: .utf8)
+        let detected = InstanceConf.hostAppBundle(of: sourceExecutable.path)
+        XCTAssertEqual(detected?.path, sourceBundle.path)
+        XCTAssertNil(InstanceConf.hostAppBundle(of: "/opt/homebrew/opt/sunshine/bin/sunshine"), "brew 裸二进制无宿主 bundle")
+
+        // 副本 = bin/<源 bundle 名> 内层可执行
+        let copied = try InstanceConf.ensureBinaryCopy(sourceBinaryPath: sourceExecutable.path, slotID: slotID)
+        let expected = InstanceConf.appBundleCopyURL(for: slotID, bundleName: "Src.app")
+            .appendingPathComponent("Contents/MacOS/sunshine")
+        XCTAssertEqual(copied, expected)
+        XCTAssertEqual(try String(contentsOf: copied, encoding: .utf8), "app-v1")
+
+        // 幂等：源未变不重拷（用 mtime 观察不到目录级变化，改为再次调用路径一致即覆盖）
+        let copiedAgain = try InstanceConf.ensureBinaryCopy(sourceBinaryPath: sourceExecutable.path, slotID: slotID)
+        XCTAssertEqual(copiedAgain, copied)
+
+        // 源升级 → 内层二进制刷新
+        try "app-v2".write(to: sourceExecutable, atomically: true, encoding: .utf8)
+        _ = try InstanceConf.ensureBinaryCopy(sourceBinaryPath: sourceExecutable.path, slotID: slotID)
+        XCTAssertEqual(try String(contentsOf: copied, encoding: .utf8), "app-v2")
+    }
+
     func testIsBindableAllowsFreeHighPort() {
         // 探测后即关闭，重复探测应持续可用
         XCTAssertTrue(InstanceConf.isBindable(59_123))

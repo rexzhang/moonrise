@@ -23,8 +23,9 @@ flowchart LR
     inst -->|"H.264 · 端口族 48089 步进 100"| c2["Moonlight 客户端 B…"]
 ```
 
-- 首屏（Moon 1）绑定用户主 sunshine.conf（默认端口 47989），行为与旧单屏一致，不可删除；第 2..N 屏各绑定 MoonRise 自有 Sunshine 实例（~/.config/moonrise/sunshine-instances/<uuid>/：conf + bin/sunshine 二进制副本 + credentials/ 独立 CA + 日志）。
+- 首屏（Moon 1）绑定用户主 sunshine.conf（默认端口 47989），行为与旧单屏一致，不可删除；第 2..N 屏各绑定 MoonRise 自有 Sunshine 实例（~/.config/moonrise/sunshine-instances/<uuid>/：conf + bin/ 可执行副本 + credentials/ 独立 CA + 日志）。
 - 二进制副本独立路径是 macOS 27 的硬要求：同一路径的并发捕获被系统串行化（第二进程永久挂起，spike S7 实测）。
+- 可执行副本两种形态（spike S8）：brew 源为裸二进制 bin/sunshine；官方 .app 源为整 bundle 拷贝 bin/<源 bundle 名>/——官方二进制带启动约束，裸拷贝在 bundle 外 exec 即被 SIGKILL。新鲜度以可执行文件 SHA-256 对锚，源升级后刷新。
 - 变更经 diff 收敛（DisplayReconcilePlan）：只重建改动屏，保留屏的串流不中断；实例启动/重启串行执行。
 
 ## 设计要点
@@ -36,7 +37,7 @@ flowchart LR
 - 逐屏开关：enabled 持久化，停用 = 停实例+销屏、槽位冻结属性保留；收敛只对已启用屏 diff，停用屏不被守护复活。
 - 实例对外名称：实例 conf 的 sunshine_name = 屏幕显示名（主 conf 同样写首屏名），客户端连接后主机名即屏名。
 - 音频不处理：全局「禁用音频串流」写主 conf 与全部实例 conf；host 本地照常出声。
-- Sunshine 托管：首屏 managed 模式（opt 稳定路径子进程独占运行，退出连带停止，异常退避重启，孤儿接管，首次解除 brew services 注册，托盘隐藏）；扩展屏实例一律 MoonRise 托管、端口 48089 起步进 100 冻结；实例启动/重启串行化。
+- Sunshine 托管：首屏 managed 模式（子进程独占运行，退出连带停止，异常退避重启，孤儿接管，首次解除 brew services 注册）；二进制路径默认 brew 探测，可经 sunshine.binaryPath 覆盖（推荐指向官方 Sunshine.app 内层二进制——其 ScreenCaptureKit 捕获修复了 macOS 27 的 AVFoundation 错绑与停滞，spike S8）；hideTrayIcon（QT_QPA_PLATFORM=minimal）仅对 brew 版有效，官方包 Qt 无 minimal 插件、须保持 false；扩展屏实例一律 MoonRise 托管、端口 48089 起步进 100 冻结；实例启动/重启串行化。
 - 外部实例清杀按进程归属判定（ppid + 托管家族集合），绝不按二进制路径——扩展屏副本与源同内容属正常形态。
 - 串流状态：逐实例日志尾随（log_path 分流）识别会话开始/结束，菜单栏每屏一行显示开关图标与状态词（串流中 / 空闲 / 未启用 / 离线）；看门狗 30s 对账兜底。
 - 客户端发现：Moonlight 按 IP 去重，自动发现只认首实例——扩展屏以手动添加 IP:端口 为主路径（本机 IP 集中显示在设置屏幕页顶部）；逐实例 PIN 配对（共享 CA 不免配对，spike S2 实测）。

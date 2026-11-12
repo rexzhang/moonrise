@@ -56,3 +56,15 @@
 4. 同证书多条目陷阱：同一客户端证书在 named_devices 存 ≥2 条时，is_client_enabled 判歧义返回 false——即使客户端出示的就是该证书也永远拒绝。落盘路径正确后不再积累；历史上重复条目需手动清理或实例重启清内存。
 5. /unpair 端点已从 nvhttp 移除（配对管理走 Web UI /api/clients/unpair）：客户端发起的 /unpair 落 404，无副作用。
 6. iPad（moonlight-iOS，iPad mini 4 / iOS 15.8）实测：getservercert 查询参数与 clientpairingsecret 签名是同一张证书（服务端哈希/签名校验通过、入库成功、{"status":true}），但随后 HTTPS（base−5 端口）TLS 握手出示的证书与之不同 → "Client certificate identity is not enabled" → 客户端报"证书校验失败"。同一进程内首轮即复现（内存仅一条时即被拒），排除多条目歧义。结论：iPad 端 TLS 身份与配对证书不一致（旧版 app 的证书未进钥匙串/未同步给 URLSession）。已验证对策（2026-11-11）：删除并重装 iPad Moonlight 后重新配对一次成功——钥匙串身份随重装重新生成，TLS 证书与配对证书一致（新证书指纹不同于旧证书），TLS 校验连续通过、配对状态正确落盘实例 state.json。同场景 Mac 客户端（moonlight-qt）无此问题。
+
+## S8 捕获错位、AVFoundation 停滞与官方 .app 升级链（2026-11-12）
+
+环境：macOS 27.2.1（26B131，11-06 从 26B123 升级）· Sunshine 2026.914.233613（brew，AVFoundation 捕获路径）。
+
+1. 捕获错位（串屏）：主实例按 output_name 指定 displayID 请求捕获，实际拿到另一块虚拟屏的实时像素。conf 映射、EDID 名称、CG 镜像集（CGDisplayIsInMirrorSet=0）、WindowServer 布局 UUID、实例↔客户端对应全部核实正确；两个实例日志均声明 "Configuring selected display (自己的 ID)"——错接发生在 AVCaptureScreenInput/CMIO 取帧环节，与屏/实例的创建顺序相关（先 Moon 2 后 Moon 1 触发），可演化为两个客户端同看一块屏。单向：按"原主"屏捕获的实例不受影响。
+2. AVFoundation 停滞（断连）：Moonlight 客户端弹窗报错后自动重连，会话 51s~4m 不等，宿主日志零错误、编码器正常。单屏基线也断连（10 分钟 5 次）→ 停滞是 2026.914 捕获路径自身问题，与错捕同屏后的双重捕获竞争叠加放大。
+3. 上游对照：PR #5511（2026-11-11 合并，v2026.1112.* 起包含）承认 AVFoundation 捕获不可靠，以 ScreenCaptureKit 重写为默认捕获后端（按 SCDisplay 对象绑定 + SCShareableContent 刷新重试 + OBS 式流参数）。升级官方 Sunshine.app 2026.1112.40957 后实测：双屏内容各归各屏（16:10/4:3 矩阵正确）、双路 SCCapture 就绪、双客户端并发 10 分钟零断连零异常（对照升级前单屏基线 10 分钟断连 5 次）。
+4. 官方 .app 二进制带启动约束（锚定自身 bundle 身份）：裸二进制拷贝到任何路径 exec 即 SIGKILL（exit 137，无任何输出、AMFI 无击杀记录）；剥 com.apple.provenance xattr 无效；整 bundle 拷贝后内层二进制可正常启动。实例副本布局因此改为 <实例>/bin/<源 bundle 名>/ 整 bundle 拷贝（InstanceConf.ensureBinaryCopy 按 hostAppBundle 分支），可执行路径指向副本内层二进制。
+5. 官方包 Qt 静态链接且只带 cocoa 平台插件（无 minimal）：MoonRise 的 hideTrayIcon（QT_QPA_PLATFORM=minimal）会令其启动即退（"no Qt platform plugin could be initialized"）。现行折中 hideTrayIcon=false（cocoa 正常，Sunshine 托盘图标可见，每实例一个）。
+6. 主实例二进制路径新增 sunshine.binaryPath 配置覆盖（AppConfig.SunshineConfig；nil = brew 自动探测回退，路径不可执行时记错误日志并回退）。
+7. 诊断教训：MoonRise info 级 os_log 不落盘，`log show` 查不到实例 spawn/退出详情——必须 `log stream --level info` 实时抓取（troubleshooting 已有记载，实测再次验证）。

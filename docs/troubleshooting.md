@@ -28,6 +28,8 @@
 ## 进程类
 
 - 两个 Sunshine 冲突：首屏 Sunshine 由 MoonRise 以子进程独占托管（首次启动自动解除 brew services 注册）；扩展屏实例是 MoonRise 主动拉起的独立副本（各自 conf/端口/凭据），清杀按进程归属判定，不会误伤兄弟实例。不要手动另起实例。
+- 客户端看到别的屏的内容（串屏）/ 频繁弹窗断连自动重连：Sunshine 2026.914 的 AVFoundation 捕获路径在 macOS 27 下会错绑虚拟屏并间歇停滞（spike S8 实测）。修复 = 改用带 ScreenCaptureKit 捕获的官方版本（≥2026.1112）：安装官方 Sunshine.app 后在 ~/.config/moonrise/config.json 的 sunshine 段加 `"binaryPath" : "/Applications/Sunshine.app/Contents/MacOS/sunshine"`，重启 MoonRise。删除该键即回退 brew 探测。
+- 换用官方 Sunshine.app 后启动即退 / 托盘报错：官方包 Qt 只带 cocoa 平台插件，config.json 里 `hideTrayIcon` 必须为 false（brew 版无此限制）。
 - MoonRise 退出后屏消失、Sunshine 停止：设计如此（生命周期即进程，含全部扩展屏实例）；重新打开即按上次开关状态恢复。
 - /Library/ColorSync/Profiles/Displays 里的 ICC 文件：每个虚拟屏身份一个，属主 root，属正常副作用，不要手删。
 
@@ -36,5 +38,6 @@
 - 客户端搜不到 Moon 2 之后的屏：Moonlight 客户端的自动发现按 IP 去重（同 IP 多实例只显示其一）——手动添加 `本机IP:端口`（本机 IP 见 设置 → 屏幕 顶部公共信息区）；连接后主机名与屏名一致。
 - 连接扩展屏要求 PIN：每个实例独立配对（设计如此）。在 Moonlight 客户端选择该屏主机并连接后，打开 MoonRise 的配对窗口（设置 → 屏幕 → 该屏「配对…」），输入客户端显示的 4 位 PIN 提交即可——无需登录实例 Web UI。
 - 实例起不来 / 串流黑帧：先看 设置 → 诊断 页的逐屏 output_name 与实例日志（~/.local/state/moonrise/sunshine-<uuid 前 8 位>.log）；同一路径并发捕获会被 macOS 串行化——MoonRise 已按实例复制独立二进制副本，若手动改动实例目录请点「重启串流」让其按源刷新。
+- 实例秒退循环（App 日志「异常退出 code=9」、实例日志零字节）：官方 .app 二进制带启动约束，裸二进制副本离开 bundle 即被 SIGKILL——MoonRise 已自动改为整 bundle 副本（bin/<源 bundle 名>/）；实例目录残缺时点「重启串流」触发按源刷新。
 - 端口冲突提示（启用屏幕时）：实例端口冻结（客户端保存了 IP:端口），被其它程序占用时报错不迁移；请释放占用该端口的程序后再启用。
 - 改了屏幕名称：会销毁重建该屏（身份随名变化），该屏位置与 Retina 记忆重置一次；客户端主机条目显示屏名（serverinfo hostname = sunshine_name，自动发现与手动添加一致），在实例重启后经 Moonlight 轮询刷新。停用中的屏改名只写配置，启用后随实例启动生效。
