@@ -1,5 +1,5 @@
 // PairingWindow.swift — 配对窗口（W3，SwiftUI）：凭据预置 → 轮询待配对设备 → PIN 提交。
-// 首屏 = Web UI 引导形态（主实例凭据归用户，不接管）。
+// 凭据为空即自动预置接管（首屏与扩展屏一致）；已自设凭据时首屏走 Web UI 引导（凭据归用户）。
 
 import AppKit
 import SwiftUI
@@ -25,13 +25,11 @@ final class PairingModel: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
 
-    func start(slotID: UUID, webPort: Int, isPrimary: Bool) {
-        if isPrimary {
-            phase = .primaryGuide
-            return
-        }
+    /// 启动配对：先尝试自动预置凭据（凭据为空即接管，首屏与扩展屏一致——首屏重置后账号为空，
+    /// 可一站式配对）；已自设凭据或实例未就绪时降级：首屏走 Web UI 引导，扩展屏走就地提示。
+    func start(webPort: Int, isPrimary: Bool, credentialsURL: URL) {
         Task {
-            if let credentials = await InstanceWebAPI.provisionCredentialsIfNeeded(slotID: slotID, webPort: webPort) {
+            if let credentials = await InstanceWebAPI.provisionCredentialsIfNeeded(credentialsURL: credentialsURL, webPort: webPort) {
                 self.credentials = credentials
                 phase = .running
                 pollTask = Task { [weak self] in
@@ -40,9 +38,11 @@ final class PairingModel: ObservableObject {
                         try? await Task.sleep(for: .seconds(2))
                     }
                 }
-            } else {
-                phase = .fallback("该实例使用自设 Web UI 凭据（或实例未就绪），请到 Web UI 配对")
+                return
             }
+            phase = isPrimary
+                ? .primaryGuide
+                : .fallback("该实例使用自设 Web UI 凭据（或实例未就绪），请到 Web UI 配对")
         }
     }
 
@@ -115,6 +115,8 @@ struct PairingView: View {
     let screenName: String
     let webPort: Int
     let isPrimary: Bool
+    /// MoonRise 侧凭据副本路径（实例 webui.json 或主实例同目录 webui.json）。
+    let credentialsURL: URL
     let onClose: () -> Void
 
     @StateObject private var model = PairingModel()
@@ -190,7 +192,10 @@ struct PairingView: View {
         .padding(16)
         .frame(width: 350, alignment: .leading)
         .task {
-            model.start(slotID: slotID, webPort: webPort, isPrimary: isPrimary)
+            model.start(
+                webPort: webPort,
+                isPrimary: isPrimary,
+                credentialsURL: credentialsURL)
         }
         .onDisappear { model.stop() }
     }

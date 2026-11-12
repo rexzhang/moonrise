@@ -3,6 +3,7 @@
 // 菜单栏 NSStatusItem 仍由 AppController 承载（AGENTS.md 允许的例外）。
 
 import SwiftUI
+import MoonRiseCore
 
 @main
 struct MoonRiseApp: App {
@@ -87,6 +88,10 @@ struct PairingWindowRootView: View {
                 screenName: display.name,
                 webPort: (display.sunshinePort ?? 47989) + 1,
                 isPrimary: display.sunshinePort == nil,
+                credentialsURL: display.sunshinePort == nil
+                    ? model.primaryCredentialsURL ?? InstanceWebAPI.primaryWebUICredentialsURL(
+                        configPath: AppConfig().sunshine.configPath)
+                    : InstanceWebAPI.webUICredentialsURL(for: display.id),
                 onClose: { dismiss() })
                 .navigationTitle("配对 — \(display.name)")
         } else {

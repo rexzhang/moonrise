@@ -429,14 +429,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let audio = config.sunshine.disableAudioStreaming
         let login = loginItemStatus == .on
         let lan = Self.lanAddresses()
+        let primaryCredentialsURL = InstanceWebAPI.primaryWebUICredentialsURL(configPath: config.sunshine.configPath)
         DispatchQueue.main.async {
-            SettingsCoordinator.shared.model.refresh(
+            let model = SettingsCoordinator.shared.model
+            model.refresh(
                 displays: displays,
                 summaries: summaries,
                 keepHostScaling: keep,
                 disableAudioStreaming: audio,
                 loginItemEnabled: login,
                 lanAddresses: lan)
+            model.primaryCredentialsURL = primaryCredentialsURL
         }
     }
 

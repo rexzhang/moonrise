@@ -89,6 +89,8 @@ final class SettingsModel: ObservableObject {
     var permissionProvider: (() -> PermissionStatusSnapshot?)?
     /// 当前页实测内容高度（页面直报；preference 不穿透 TabView，根视图据此定窗口高）。
     @Published var pageContentHeight: CGFloat = 0
+    /// 主实例 Web UI 凭据副本路径（配对窗口首屏接管用；AppController 按当前 configPath 注入）。
+    var primaryCredentialsURL: URL?
 
     func reportContentSize(_ size: CGSize, for page: SettingsPage) {
         guard size.height.isFinite, size.height > 0 else { return }

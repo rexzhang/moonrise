@@ -56,6 +56,14 @@ public enum InstanceWebAPI {
         InstanceConf.credentialsDirectory(for: slotID).appendingPathComponent("webui.json")
     }
 
+    /// 主实例 Web UI 凭据副本路径（MoonRise 侧；与主 conf 同目录，随首屏重置一并清除）。
+    public static func primaryWebUICredentialsURL(configPath: String) -> URL {
+        URL(fileURLWithPath: Paths.expandTilde(configPath))
+            .deletingLastPathComponent()
+            .appendingPathComponent("credentials")
+            .appendingPathComponent("webui.json")
+    }
+
     // MARK: - 纯函数（可测）
 
     /// Basic auth 请求头值。
@@ -140,9 +148,10 @@ public enum InstanceWebAPI {
     }
 
     /// 预置凭据（D4）：等待 web 就绪（timeout 内），凭据为空则 POST /api/password 写入随机凭据并落盘。
-    /// 返回：已预置凭据（含本次预置）；nil = 用户已自设凭据（无 webui.json 但 401）或超时离线 → 降级走 Web UI。
-    public static func provisionCredentialsIfNeeded(slotID: UUID, webPort: Int, timeout: TimeInterval = 12) async -> Credentials? {
-        if let existing = loadCredentials(for: slotID) {
+    /// credentialsURL 为 MoonRise 侧凭据副本路径（实例 credentials/webui.json 或主实例同目录 webui.json）。
+    /// 返回：已预置凭据（含本次预置）；nil = 用户已自设凭据（无副本但 401）或超时离线 → 降级走 Web UI。
+    public static func provisionCredentialsIfNeeded(credentialsURL: URL, webPort: Int, timeout: TimeInterval = 12) async -> Credentials? {
+        if let existing = loadCredentials(from: credentialsURL) {
             return existing
         }
         let deadline = Date().addingTimeInterval(timeout)
@@ -153,7 +162,7 @@ public enum InstanceWebAPI {
             case .empty:
                 let credentials = generateCredentials()
                 if await setPassword(credentials, webPort: webPort) {
-                    try? saveCredentials(credentials, to: webUICredentialsURL(for: slotID))
+                    try? saveCredentials(credentials, to: credentialsURL)
                     return credentials
                 }
             case .offline:
