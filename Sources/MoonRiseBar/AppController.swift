@@ -451,6 +451,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             },
             deleteSlot: { [weak self] display in self?.deleteSlot(display) },
+            resetPrimary: { [weak self] display in self?.resetPrimaryScreen(display) },
             applyEdit: { [weak self] candidate, reportError in
                 self?.applySlotEdit(candidate, reportError: reportError)
             },
@@ -552,6 +553,49 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 SettingsCoordinator.shared.model.reportError(display.id, error.localizedDescription)
             }
         }
+    }
+
+    /// 首屏重置（卡片动作）：恢复默认名与规格 + 清主实例账号与配对（回全新安装状态）。
+    /// 停用屏只写配置与清凭据，启用后生效；启用屏经 rebuild 联动主实例按值变重启。
+    private func resetPrimaryScreen(_ display: DisplayConfig) {
+        runBusy {
+            do {
+                let defaults = DisplayConfig(
+                    id: display.id,
+                    slotNumber: display.slotNumber,
+                    name: "Moon \(display.slotNumber)",
+                    width: 2560,
+                    height: 1600,
+                    refreshRate: 60,
+                    hiDPI: true,
+                    enabled: display.enabled,
+                    sunshinePort: display.sunshinePort)
+                try ScreenChangeValidator.validate(
+                    defaults, others: self.config.displays.filter { $0.id != display.id })
+                guard let idx = self.config.displays.firstIndex(where: { $0.id == display.id }) else { return }
+                let wasEnabled = self.config.displays[idx].enabled
+                self.config.displays[idx] = defaults
+                try? self.config.save()
+                Self.removePrimaryCredentials(configPath: self.config.sunshine.configPath)
+                if wasEnabled {
+                    // conf 值变（sunshine_name / output_name）→ 重启主实例，读已清空凭据 = 新装状态
+                    try self.orchestrator?.rebuild(defaults)
+                } else {
+                    try? self.sunshineManager.stop()
+                }
+            } catch {
+                Log.error("重置失败：\(error.localizedDescription)")
+                SettingsCoordinator.shared.model.reportError(display.id, error.localizedDescription)
+            }
+        }
+    }
+
+    /// 清主实例账号与配对：sunshine_state.json（Web 凭据 + 配对设备）与 credentials/（证书对）。
+    /// 主 Sunshine 重启时自动重建——Moonlight 端已配对设备全部失效，需重新配对。
+    private static func removePrimaryCredentials(configPath: String) {
+        let dir = URL(fileURLWithPath: Paths.expandTilde(configPath)).deletingLastPathComponent()
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("sunshine_state.json"))
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("credentials"))
     }
 
     private func applySlotEdit(_ newDisplay: DisplayConfig, reportError: @escaping (String?) -> Void) {

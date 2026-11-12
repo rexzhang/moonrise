@@ -45,6 +45,8 @@ struct ScreenCallbacks {
     var restartSlot: ((UUID) -> Void)?
     var openWebUI: ((Int) -> Void)?
     var deleteSlot: ((DisplayConfig) -> Void)?
+    /// 首屏重置（恢复默认名与规格 + 清主实例账号与配对，回全新安装状态）。
+    var resetPrimary: ((DisplayConfig) -> Void)?
     /// 应用修改（结果回调：非 nil = 失败原因就地报错；nil = 成功，窗口自行关闭）。
     var applyEdit: ((DisplayConfig, @escaping (String?) -> Void) -> Void)?
     /// 应用添加（结果回调语义同上；编号/命名/端口由 AppController 分配）。
@@ -620,9 +622,14 @@ private struct ScreenCard: View {
             Button("配对…") { openWindow(id: "moonrise.pairing", value: display.id) }
                 .disabled(!display.enabled)
             Button("修改…") { openWindow(id: "moonrise.edit", value: display.id) }
-            Button("删除（销屏并清理）") { callbacks.deleteSlot?(display) }
-                .foregroundColor(.red)
-                .disabled(display.sunshinePort == nil)
+            if display.sunshinePort == nil {
+                // 首屏绑定主 conf 不可删除：删除动作替换为重置（回默认名与规格，清账号与配对）
+                Button("重置（清账号与配对）") { callbacks.resetPrimary?(display) }
+                    .foregroundColor(.red)
+            } else {
+                Button("删除（销屏并清理）") { callbacks.deleteSlot?(display) }
+                    .foregroundColor(.red)
+            }
         }
         .font(.caption)
     }
