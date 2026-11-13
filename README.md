@@ -8,7 +8,7 @@
 
 仓库：https://github.com/rexzhang/moonrise
 
-把另一台 Mac（Moon）变成本机（host）的扩展屏，充分利用 Moon 的 Retina 面板（1:1 像素映射）。
+把另一台 Mac/iPad（Moon）变成本机（host）的扩展屏，充分利用 Moon 的 Retina 面板（1:1 像素映射）。
 
 MoonRise 是一款菜单栏应用：在 host 上创建 HiDPI 虚拟屏幕（默认 2560×1600@60，可逐屏自定义），每块屏绑定一个由 App 托管的 Sunshine 实例，自动捕获串流；Moon 端用 Moonlight 全屏显示，文字与原生同样锐利。App 在则屏在，退出即销毁全部虚拟屏并停止全部实例。
 
