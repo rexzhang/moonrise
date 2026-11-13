@@ -90,7 +90,7 @@ public final class ManagedSunshineStore: Sendable {
     }
 
     /// 本机编译架构 → 资产名后缀（arm64 / x86_64）。
-    static var archAssetName: String {
+    public static var archAssetName: String {
         #if arch(arm64)
         return "arm64"
         #elseif arch(x86_64)

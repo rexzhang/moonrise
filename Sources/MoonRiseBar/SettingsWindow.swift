@@ -77,15 +77,14 @@ struct SunshineCallbacks {
     var loadReleases: (() -> Void)?
     /// 版本选择变更（写入 store.selectedVersion）。
     var setSelectedVersion: ((String) -> Void)?
+    /// 重启主实例（编码器探测未通过等场景的补救动作）。
+    var restartPrimary: (() -> Void)?
 }
 
 /// 权限页状态快照（主线程每秒采集）。
 struct PermissionStatusSnapshot {
     let captureGranted: Bool
     let inputGranted: Bool
-    let sunshineRunning: Bool
-    let sunshineStatusLine: String
-    let probeOK: Bool
 }
 
 // MARK: - 状态模型
@@ -104,6 +103,11 @@ final class SettingsModel: ObservableObject {
     var diagnosticsProvider: ((@escaping ([DiagnosticsModel.CheckRow]) -> Void) -> Void)?
     /// 权限页数据源（AppController 提供，主线程采集）。
     var permissionProvider: (() -> PermissionStatusSnapshot?)?
+    /// Sunshine 页进程状态源（AppController 提供，页面每秒拉取）。
+    var sunshineProcessProvider: (() -> String)?
+    /// Sunshine 页健康检查源（受管副本 + output_name 逐屏一致性；页面定时拉取）。
+    var sunshineHealthProvider: (() -> [DiagnosticsModel.CheckRow])?
+    @Published var sunshineHealthRows: [DiagnosticsModel.CheckRow] = []
     /// 当前页实测内容高度（页面直报；preference 不穿透 TabView，根视图据此定窗口高）。
     @Published var pageContentHeight: CGFloat = 0
     /// 主实例 Web UI 凭据副本路径（配对窗口首屏接管用；AppController 按当前 configPath 注入）。
@@ -119,6 +123,10 @@ final class SettingsModel: ObservableObject {
     @Published var acquireTotal: Int64 = 0
     @Published var sunshineMessage: String?
     @Published var legacySignal = false
+    /// 主 conf 展开路径（信息区展示用）。
+    @Published var sunshineConfigPath = ""
+    /// 登录项设置失败弹窗文案（通用页 .alert 呈现）。
+    @Published var loginItemAlert: String?
     var sunshineCallbacks = SunshineCallbacks()
 
     func reportContentSize(_ size: CGSize, for page: SettingsPage) {
@@ -177,6 +185,9 @@ final class SettingsCoordinator {
     private var heightCancellables: Set<AnyCancellable> = []
     /// 待直达页：场景窗口有 tab 记忆恢复，页赋值须等窗口出现后（恢复之后）才生效。
     private var pendingPage: SettingsPage?
+    /// 设置窗口出现（登记）时的钩子：AppController 在此刷新回调接线与页面数据
+    /// （SettingsLink 直接开窗不经过 showSettings，模型刷新挂此钩子）。
+    var onSettingsShown: (() -> Void)?
 
     private init() {
         // 设置窗口高度跟随页内容（页切换 / 行内内容变化）
@@ -198,6 +209,7 @@ final class SettingsCoordinator {
                 self.settingsWindow = window
                 centerOnMainScreen(window)
                 self.syncSettingsWindowSize()
+                self.onSettingsShown?()
                 if let page = self.pendingPage {
                     self.pendingPage = nil
                     self.model.page = page
@@ -492,6 +504,11 @@ struct GeneralPageView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .modifier(ContentSizeReporter { size in model.reportContentSize(size, for: .general) })
+        .alert("开机自启设置失败", isPresented: loginAlertBinding) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(model.loginItemAlert ?? "")
+        }
     }
 
     private var keepBinding: Binding<Bool> {
@@ -520,6 +537,12 @@ struct GeneralPageView: View {
                 model.callbacks.setLoginItem?(newValue)
             })
     }
+
+    private var loginAlertBinding: Binding<Bool> {
+        Binding(
+            get: { model.loginItemAlert != nil },
+            set: { if !$0 { model.loginItemAlert = nil } })
+    }
 }
 
 // MARK: - Sunshine 页面（受管来源：下载 / 更新 / 重新获取 / 检查更新）
@@ -528,6 +551,9 @@ struct SunshinePageView: View {
     @ObservedObject var model: SettingsModel
     /// 版本列表是否已加载（展开选择时拉取一次）
     @State private var releasesLoaded = false
+    @State private var processStatus = ""
+    @State private var healthHeartbeat = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
+    private let processHeartbeat = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -540,6 +566,8 @@ struct SunshinePageView: View {
             }
             statusSection
             versionSection
+            sunshineInfoSection
+            healthSection
             if model.acquirePhase != nil {
                 progressSection
             }
@@ -563,14 +591,39 @@ struct SunshinePageView: View {
             releasesLoaded = true
             model.sunshineCallbacks.loadReleases?()
         }
+        .onAppear {
+            refreshDynamic()
+        }
+        .onReceive(processHeartbeat) { _ in
+            refreshDynamic()
+        }
+        .onReceive(healthHeartbeat) { _ in
+            refreshHealth()
+        }
+    }
+
+    /// 进程状态每秒拉取（轻量）；健康检查每 5 秒拉取——内含日志文件读，
+    /// 必须在后台队列执行（主线程同步读大日志 = 界面全面卡死），结果回主线程。
+    private func refreshDynamic() {
+        processStatus = model.sunshineProcessProvider?() ?? ""
+    }
+
+    private func refreshHealth() {
+        guard let provider = model.sunshineHealthProvider else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let rows = provider()
+            DispatchQueue.main.async {
+                model.sunshineHealthRows = rows
+            }
+        }
     }
 
     private var statusSection: some View {
         SettingsGroupBox(title: "状态") {
             RichRow(symbol: "checkmark.seal", title: model.sunshineReady ? "就绪" : "未获取",
                     detail: model.sunshineReady
-                        ? "来源：~/.config/moonrise/sunshine/Sunshine.app（Apple Silicon/Intel 按本机架构匹配）"
-                        : "尚未获取受管 Sunshine——获取后即可使用屏幕功能") {
+                        ? "受管副本（官方 release 下载并验签，来源路径见下方详细信息）"
+                        : "尚未获取受管 Sunshine——在下方版本区点「获取」后即可使用屏幕功能") {
                 if model.sunshineReady {
                     Text("v\(model.sunshineInstalledVersion ?? "?")")
                         .font(.callout).monospacedDigit()
@@ -578,13 +631,36 @@ struct SunshinePageView: View {
                     Text("未安装").font(.callout).foregroundColor(.secondary)
                 }
             }
-            if !model.sunshineReady {
-                Divider()
-                RichRow(symbol: "arrow.down.circle", title: "获取 Sunshine",
-                        detail: "从 GitHub Releases 下载官方版本并验签安装（需要网络）") {
-                    Button("获取") { model.sunshineCallbacks.acquire?() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.acquirePhase != nil)
+            Divider()
+            RichRow(symbol: "bolt.horizontal",
+                    title: "进程",
+                    detail: processStatus.isEmpty ? "—" : processStatus) {
+                Button("重启") { model.sunshineCallbacks.restartPrimary?() }
+                    .disabled(model.acquirePhase != nil)
+            }
+        }
+    }
+
+    private var healthSection: some View {
+        SettingsGroupBox(title: "健康检查") {
+            if model.sunshineHealthRows.isEmpty {
+                Text("暂无检查结果")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(model.sunshineHealthRows.indices, id: \.self) { index in
+                        RichRow(symbol: model.sunshineHealthRows[index].symbol,
+                                title: model.sunshineHealthRows[index].title,
+                                detail: model.sunshineHealthRows[index].detail) {
+                            Text(model.sunshineHealthRows[index].status.badge).font(.caption)
+                        }
+                        if index < model.sunshineHealthRows.count - 1 {
+                            Divider()
+                        }
+                    }
                 }
             }
         }
@@ -645,6 +721,52 @@ struct SunshinePageView: View {
         }
     }
 
+    // MARK: Sunshine 信息（本地安装相关，逐行可复制）
+
+    @State private var infoExpanded = false
+
+    private var sunshineInfoSection: some View {
+        SettingsGroupBox(title: "Sunshine 信息") {
+            DisclosureGroup("详细信息", isExpanded: $infoExpanded) {
+                VStack(alignment: .leading, spacing: 6) {
+                    infoRow("受管 bundle", Paths.managedSunshineBundleURL.path)
+                    infoRow("可执行文件", Paths.managedSunshineExecutableURL.path)
+                    infoRow("主 conf", model.sunshineConfigPath)
+                    infoRow("首屏端口族", "47989（配对）· 47990（Web UI）· 48010（RTSP）")
+                    infoRow("主实例日志", Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path)
+                    infoRow("本机架构", ManagedSunshineStore.archAssetName)
+                    infoRow("托盘", "system_tray = disabled（已抑制）")
+                }
+                .padding(.vertical, 6)
+            }
+            .font(.callout)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func infoRow(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 96, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 8)
+            Button {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(value, forType: .string)
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .help("复制")
+        }
+    }
+
     private var phaseText: String {
         switch model.acquirePhase {
         case .fetching: return "查询版本"
@@ -697,9 +819,12 @@ struct ScreensPageView: View {
         VStack(alignment: .leading, spacing: 12) {
             ipSection
             HStack {
-                Button("添加屏幕…") { openWindow(id: "moonrise.add") }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!model.sunshineReady)
+                Button("添加屏幕…") {
+                    Log.info("添加屏幕：openWindow(moonrise.add) 调用")
+                    openWindow(id: "moonrise.add")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!model.sunshineReady)
                 Spacer()
                 Text("状态每秒自动刷新")
                     .font(.caption)
@@ -773,9 +898,20 @@ private struct ScreenCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
-            Text(specText)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundColor(.secondary)
+            HStack(spacing: 8) {
+                Text(specText)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.secondary)
+                if display.hiDPI {
+                    // 等效分辨率徽章：Moon 端 Retina 显示模式的关键值，突出显示
+                    Text("等效 \(display.width / 2)×\(display.height / 2)")
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundColor(.accentColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                }
+            }
             actionRow
             if let error {
                 Text("✗ \(error)")
@@ -794,9 +930,13 @@ private struct ScreenCard: View {
             statePill
             Text(display.name).fontWeight(.semibold)
             // String 显式转换：插值走本地化格式会给 5 位端口加千分位（D11 无千分位）
+            // 端口徽章：客户端手动添加主机需要 IP:端口，突出显示
             Text("端口 \(String(display.sunshinePort ?? 47989))")
-                .foregroundColor(.secondary)
-                .font(.caption)
+                .font(.callout.weight(.semibold).monospacedDigit())
+                .foregroundColor(.accentColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.accentColor.opacity(0.12)))
             Spacer()
             Text(summary?.syncStatus ?? "")
                 .font(.caption)
@@ -804,12 +944,11 @@ private struct ScreenCard: View {
         }
     }
 
-    /// 规格行：宽×高 · 刷新率 Hz · HiDPI · 等效 宽/2×高/2（HiDPI 关闭时无后两段）。
+    /// 规格行：宽×高 · 刷新率 Hz · HiDPI（等效分辨率独立徽章突出显示）。
     private var specText: String {
         var parts = ["\(display.width)×\(display.height)", "\(display.refreshRate) Hz"]
         if display.hiDPI {
             parts.append("HiDPI")
-            parts.append("等效 \(display.width / 2)×\(display.height / 2)")
         }
         return parts.joined(separator: " · ")
     }
@@ -928,8 +1067,7 @@ struct DiagnosticsPageView: View {
 struct PermissionPageView: View {
     @ObservedObject var model: SettingsModel
     @State private var snapshot = PermissionStatusSnapshot(
-        captureGranted: false, inputGranted: false,
-        sunshineRunning: false, sunshineStatusLine: "", probeOK: false)
+        captureGranted: false, inputGranted: false)
     private let heartbeat = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -954,20 +1092,6 @@ struct PermissionPageView: View {
                     if !snapshot.inputGranted {
                         Button("请求输入控制授权") { model.callbacks.requestInputControlPermission?() }
                         Button("打开系统设置") { model.callbacks.openCaptureSystemSettings?() }
-                    }
-                }
-                Divider()
-                RichRow(symbol: "bolt.horizontal",
-                        title: "Sunshine 进程",
-                        detail: snapshot.sunshineStatusLine) {}
-                Divider()
-                RichRow(symbol: "video",
-                        title: "编码器探测",
-                        detail: snapshot.probeOK
-                            ? "捕获就绪，VideoToolbox 硬件编码器就绪"
-                            : "未通过（需要权限或重启）") {
-                    if !snapshot.probeOK {
-                        Button("重启 Sunshine") { model.callbacks.restartPrimarySunshine?() }
                     }
                 }
             }
@@ -1005,9 +1129,6 @@ struct PermissionPageView: View {
             steps += " 完成后本页数秒内自动变绿，Sunshine 会自动重启。"
             return steps
         }
-        if !snapshot.probeOK {
-            return "权限已全部授予 ✓。Sunshine 需要重启以重跑编码器探测：点「重启 Sunshine」。（授权翻转时通常已自动完成）"
-        }
-        return "全部就绪 ✓：可在 Moon 端 Moonlight 全屏连接本机，验证扩展屏。"
+        return "权限就绪 ✓。Sunshine 进程与编码器探测状态见「Sunshine」页。"
     }
 }

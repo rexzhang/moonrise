@@ -1,23 +1,26 @@
-// AppController.swift — 菜单栏 App 主体：多屏编排接线、菜单栏状态与每屏开关、守护。
-// 菜单栏只做状态显示与快速开关；全部管理操作收敛于设置窗口（SettingsCoordinator）。
+// AppController.swift — App 主体：生命周期壳 + 多屏编排接线 + 守护。
+// 菜单栏由 SwiftUI MenuBarExtra 承载（MenuBarPanelView），本类只暴露可观察状态；
+// 全部管理操作收敛于设置窗口（SettingsCoordinator）。
 
 import AppKit
+import Combine
 import CoreGraphics
 import ServiceManagement
 import MoonRiseCore
 
-final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppController: NSObject, NSApplicationDelegate {
     // MARK: - 状态
 
-    fileprivate enum Phase: Equatable {
+    enum Phase: Equatable {
         case starting
         case locked          // Sunshine 未获取：不建屏/不启实例，引导设置窗口 Sunshine 页
         case running
         case degraded(message: String)
     }
 
-    /// 每屏摘要（菜单状态行 / 诊断 / 管理窗口共用）
-    struct ScreenSummary {
+    /// 每屏摘要（菜单面板 / 诊断 / 管理窗口共用）
+    struct ScreenSummary: Identifiable {
+        var id: UUID { slotID }
         let slotID: UUID
         let name: String
         let slotNumber: Int
@@ -34,18 +37,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 设置读取快照（写侧一律经 store.mutate）
     private var config: AppConfig { store.config }
     private let sunshineStore = ManagedSunshineStore()
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let menu = NSMenu()
     private var virtualController: VirtualDisplayController?
     private var sunshineManager: SunshineManaging
     private var registry: SunshineInstanceRegistry?
     private var orchestrator: DisplayOrchestrator?
-    private var sunshineStatus = "待启动"
+
+    // 真源状态（面板快照经 syncPanel 主线程推送到 PanelModel）
     private var phase: Phase = .starting
     private var busy = false
     private var watchdog: Timer?
     private var lastCapturePermission: Bool?
     private var restartedSunshineAfterGrant = false
+    private var lastPanelError: String?
 
     // MARK: - 生命周期
 
@@ -60,10 +63,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // SwiftUI 入口下的原 main.swift 职责：菜单栏 App 始终从附件形态启动
         NSApp.setActivationPolicy(.accessory)
-        menu.delegate = self
-        menu.autoenablesItems = false
-        statusItem.menu = menu
-        refreshMenu()
+        // SettingsLink 直接开窗不经过 showSettings：模型刷新挂窗口出现钩子
+        SettingsCoordinator.shared.onSettingsShown = { [weak self] in
+            self?.wireScreenCallbacks()
+            self?.refreshScreenModel()
+        }
+        syncPanel()
 
         runBusy {
             // Sunshine 就绪判定唯一来源：受管副本（ManagedSunshineStore.isReady）。
@@ -72,7 +77,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.phase = .locked
                 Log.info("Sunshine 未获取：进入锁定态，打开设置窗口 Sunshine 页")
                 DispatchQueue.main.async {
-                    self.refreshMenu()
+                    self.syncPanel()
                     self.showSettings(page: .sunshine)
                 }
                 return
@@ -96,7 +101,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 liveDisplayIDs: { [weak self] in self?.liveIDs() ?? [] })
             orchestrator.streamMonitor.onStreamingChanged = { [weak self] _, _ in
                 DispatchQueue.main.async {
-                    self?.refreshMenu()
                     self?.writeState()
                 }
             }
@@ -122,7 +126,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.phase = .running
             self.cleanupOrphanInstanceDirectories()
             self.startWatchdog()
-            self.refreshMenu()
+            // refreshMenu 触碰 NSMenu/NSStatusItem（窗口布局），必须主线程：
+            // realize 泵后台线程 run loop 时，排在其上的 AppKit 任务会被执行，
+            // 非主线程窗口布局触发 CoreAutoLayout 断言直接 abort（14:12 崩溃实测）。
+            DispatchQueue.main.async { self.syncPanel() }
         } catch {
             self.degrade(error: error)
         }
@@ -188,6 +195,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
     }
 
+    /// 菜单面板整行点击：反转该屏启用（失败置面板内联错误）。
+    func toggleScreen(slotID: UUID) {
+        guard let display = config.displays.first(where: { $0.id == slotID }) else { return }
+        var updated = display
+        updated.enabled.toggle()
+        setEnabled(updated, fromMenu: true)
+    }
+
     // MARK: - 核心动作（后台执行）
 
     /// 全量收敛（diff；看门狗/回调/重新同步共用）
@@ -208,6 +223,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func writeState() {
+        syncPanel()
         refreshScreenModel()
         let summaries = screenSummaries()
         let screens = summaries.map { summary in
@@ -234,144 +250,55 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         state.write()
     }
 
+    /// 菜单面板快照刷新：真源状态主线程推送到 PanelModel（驱动 MenuBarExtra 重渲染）。
+    private func syncPanel() {
+        let currentPhase = phase
+        let snapshots = screenSummaries()
+        let currentBusy = busy
+        DispatchQueue.main.async {
+            let panel = PanelModel.shared
+            panel.phase = currentPhase
+            panel.summaries = snapshots
+            panel.busy = currentBusy
+        }
+    }
+
+    /// 面板内联错误（5s 自动清除）。
+    private func setPanelError(_ message: String) {
+        lastPanelError = message
+        DispatchQueue.main.async {
+            PanelModel.shared.panelError = message
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                if PanelModel.shared.panelError == message {
+                    PanelModel.shared.panelError = nil
+                }
+            }
+        }
+    }
+
     private func runBusy(_ work: @escaping () -> Void, completion: (() -> Void)? = nil) {
         guard !busy else { return }
         busy = true
-        DispatchQueue.main.async { self.refreshMenu() }
+        DispatchQueue.main.async { PanelModel.shared.busy = true }
         DispatchQueue.global(qos: .userInitiated).async {
             work()
             DispatchQueue.main.async {
                 self.busy = false
-                self.refreshMenu()
                 self.writeState()
                 completion?()
             }
         }
     }
 
-    // MARK: - 菜单（只做状态显示，D7）
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        rebuildMenu()
-    }
-
-    private func refreshMenu() {
-        rebuildMenu()
-    }
-
-    private func rebuildMenu() {
-        menu.removeAllItems()
-        menu.addItem(statusMenuItem())
-
-        // 每屏一行：状态图标反映屏幕状态（串流中/空闲/未启用/离线），点击整行反转启用（D2）
-        // 锁定态下每屏行禁用（无 Sunshine 无屏）
-        let locked = phase == .locked
-        for summary in screenSummaries() {
-            let item = NSMenuItem(
-                title: "\(summary.name) · \(locked ? "未就绪" : summary.state.label)",
-                action: #selector(toggleScreenMenuItem(_:)),
-                keyEquivalent: "")
-            item.target = self
-            item.representedObject = summary.slotID.uuidString
-            item.isEnabled = !busy && !locked
-            // 状态图标（圆点体系）：串流中 = 绿实心圆；空闲 = 绿空心圈；未启用 = 灰空心圈；离线 = 橙实心圆
-            let icon: (symbol: String, color: NSColor)
-            switch summary.state {
-            case .streaming: icon = ("circle.fill", .systemGreen)
-            case .idle: icon = ("circle", .systemGreen)
-            case .disabled: icon = ("circle", .secondaryLabelColor)
-            case .offline: icon = ("circle.fill", .systemOrange)
-            }
-            if let symbol = NSImage(systemSymbolName: icon.symbol,
-                                    accessibilityDescription: summary.state.label) {
-                item.image = symbol.withSymbolConfiguration(.init(paletteColors: [icon.color]))
-            }
-            menu.addItem(item)
-        }
-
-        menu.addItem(.separator())
-
-        let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettings(_:)), keyEquivalent: "")
-        settingsItem.target = self
-        settingsItem.isEnabled = !busy
-        menu.addItem(settingsItem)
-
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
-        quitItem.target = self
-        quitItem.isEnabled = !busy
-        menu.addItem(quitItem)
-
-        updateIcon()
-    }
-
-    private func statusMenuItem() -> NSMenuItem {
-        switch phase {
-        case .starting:
-            let item = NSMenuItem(title: "启动中…", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            return item
-        case .locked:
-            let item = NSMenuItem(title: "Sunshine 未就绪 — 点击设置", action: #selector(openSunshineSettings(_:)), keyEquivalent: "")
-            item.target = self
-            return item
-        case .running:
-            let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            let summaries = screenSummaries()
-            let enabledCount = summaries.filter(\.enabled).count
-            let streamingCount = summaries.filter { $0.state == .streaming }.count
-            let instancesTotal = summaries.filter { $0.enabled }.count
-            let instancesRunning = summaries.filter { $0.enabled && $0.instanceStatus != "未运行" }.count
-            item.title = "\(enabledCount) 屏 · 串流 \(streamingCount) · 实例 \(instancesRunning)/\(instancesTotal)"
-            return item
-        case .degraded(let message):
-            let item = NSMenuItem(title: "错误：\(message)", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            return item
-        }
-    }
-
-    private var loginItemStatus: NSControl.StateValue {
+    /// 登录项注册状态（通用页开关初值）。
+    private var loginItemEnabled: Bool {
         if #available(macOS 13.0, *) {
-            return SMAppService.mainApp.status == .enabled ? .on : .off
+            return SMAppService.mainApp.status == .enabled
         }
-        return .off
+        return false
     }
 
-    private func updateIcon() {
-        let image: NSImage
-        switch phase {
-        case .starting, .running:
-            image = BrandGlyph.normal()
-        case .locked, .degraded:
-            image = BrandGlyph.problem()
-        }
-        statusItem.button?.image = image
-    }
-
-    // MARK: - 菜单动作
-
-    @objc private func openSettings(_ sender: NSMenuItem) {
-        showSettings()
-    }
-
-    @objc private func openSunshineSettings(_ sender: NSMenuItem) {
-        showSettings(page: .sunshine)
-    }
-
-    /// 菜单屏幕行点击：反转该屏启用（失败弹错误框）。
-    @objc private func toggleScreenMenuItem(_ sender: NSMenuItem) {
-        guard let uuidString = sender.representedObject as? String,
-              let slotID = UUID(uuidString: uuidString),
-              let display = config.displays.first(where: { $0.id == slotID }) else { return }
-        var updated = display
-        updated.enabled.toggle()
-        setEnabled(updated, fromMenu: true)
-    }
-
-    @objc private func resyncAll() {
+    private func resyncAll() {
         runBusy {
             do {
                 try self.reconcileNow()
@@ -430,13 +357,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         try? sunshineManager.stop()
-        watchdog?.invalidate()
-        watchdog = nil
+        DispatchQueue.main.async {
+            self.watchdog?.invalidate()
+            self.watchdog = nil
+            self.syncPanel()
+        }
         virtualController = nil
         registry = nil
         orchestrator = nil
         phase = .locked
-        refreshMenu()
     }
 
     /// 检查更新（手动）：releases/latest 与已装版本比较。
@@ -485,7 +414,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func restartAllInstances() {
+    private func restartAllInstances() {
         runBusy {
             try? self.sunshineManager.restart()
             for display in self.config.displays where display.enabled && display.sunshinePort != nil {
@@ -493,7 +422,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     try? manager.restart()
                 }
             }
-            self.sunshineStatus = "已重启"
         }
     }
 
@@ -517,9 +445,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     port: summary.port,
                     enabled: summary.enabled,
                     syncStatus: summary.syncStatus)
-            },
-            sunshineStatus: sunshineStatus,
-            manager: sunshineManager)
+            })
         DispatchQueue.global(qos: .userInitiated).async {
             let rows = DiagnosticsModel.runChecks(context: context)
             DispatchQueue.main.async { completion(rows) }
@@ -537,13 +463,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try service.unregister()
             }
         } catch {
-            showInfoAlert("开机自启设置失败", text: "\(error.localizedDescription)\n\n从 swift run 直接启动无法注册登录项；请先用 scripts/install-app.sh 安装为 App。")
+            DispatchQueue.main.async {
+                SettingsCoordinator.shared.model.loginItemAlert = "\(error.localizedDescription)\n\n从 swift run 直接启动无法注册登录项；请先用 scripts/install-app.sh 安装为 App。"
+            }
         }
         refreshScreenModel()
-    }
-
-    @objc private func quitApp() {
-        NSApp.terminate(nil)
     }
 
     // MARK: - 扩展屏幕管理（SwiftUI 三窗：列表 / 修改 / 配对）
@@ -559,7 +483,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let summaries = screenSummaries()
         let keep = config.keepHostScaling
         let audio = config.sunshine.disableAudioStreaming
-        let login = loginItemStatus == .on
+        let login = loginItemEnabled
         let lan = Self.lanAddresses()
         let primaryCredentialsURL = InstanceWebAPI.primaryWebUICredentialsURL(configPath: config.sunshine.configPath)
         DispatchQueue.main.async {
@@ -575,6 +499,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.sunshineReady = ManagedSunshineStore.isReady()
             model.sunshineInstalledVersion = ManagedSunshineStore.installedVersion()
             model.selectedVersion = self.config.sunshine.selectedVersion
+            model.sunshineConfigPath = Paths.expandTilde(self.config.sunshine.configPath)
             model.legacySignal = self.hasLegacySunshineSignal()
                 && !UserDefaults.standard.bool(forKey: "sunshine.migrationDone")
         }
@@ -642,20 +567,38 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 DispatchQueue.main.async {
                     SettingsCoordinator.shared.model.selectedVersion = version
                 }
+            },
+            restartPrimary: { [weak self] in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    try? self?.sunshineManager.restart()
+                }
             })
         model.diagnosticsProvider = { [weak self] completion in
             self?.runDiagnostics(completion: completion)
         }
+        model.sunshineProcessProvider = { [weak self] in
+            self?.sunshineManager.statusLine() ?? "未运行"
+        }
+        model.sunshineHealthProvider = { [weak self] in
+            guard let self else { return [] }
+            let screens = self.screenSummaries().map { summary in
+                DiagnosticsModel.ScreenDiagnostics(
+                    name: summary.name,
+                    slotID: summary.slotID,
+                    displayID: summary.displayID,
+                    isLive: summary.displayID.map { self.liveIDs().contains($0) } ?? false,
+                    spec: summary.spec,
+                    port: summary.port,
+                    enabled: summary.enabled,
+                    syncStatus: summary.syncStatus)
+            }
+            return DiagnosticsModel.sunshineChecks(screens: screens)
+        }
         model.permissionProvider = { [weak self] in
             guard let self else { return nil }
-            let sunshine = self.sunshineManager.statusLine()
             return PermissionStatusSnapshot(
                 captureGranted: CapturePermission.granted,
-                inputGranted: CapturePermission.inputControlGranted,
-                sunshineRunning: sunshine.hasPrefix("运行中"),
-                sunshineStatusLine: sunshine,
-                probeOK: DiagnosticsModel.sunshineProbeGranted(
-                    logPath: Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path))
+                inputGranted: CapturePermission.inputControlGranted)
         }
     }
 
@@ -685,25 +628,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             } catch {
                 Log.error("启用/停用失败：\(error.localizedDescription)")
                 if fromMenu {
-                    // 菜单行切换失败：错误弹框（标题 = 动作、正文 = 原因）
-                    self.showMenuErrorAlert(display: display, message: error.localizedDescription)
+                    self.setPanelError("切换「\(display.name)」失败：\(error.localizedDescription)")
                 } else {
                     SettingsCoordinator.shared.model.reportError(display.id, error.localizedDescription)
                 }
             }
-        }
-    }
-
-    /// 菜单行切换失败的错误弹框（错误反馈弹框，非确认弹窗）。
-    private func showMenuErrorAlert(display: DisplayConfig, message: String) {
-        DispatchQueue.main.async {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "\(display.enabled ? "启用" : "停用")「\(display.name)」失败"
-            alert.informativeText = message
-            alert.addButton(withTitle: "好")
-            NSApp.activate(ignoringOtherApps: true)
-            alert.runModal()
         }
     }
 
@@ -800,6 +729,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func addScreen(_ candidate: DisplayConfig, reportError: @escaping (String?) -> Void) {
         runBusy {
             do {
+                Log.info("添加屏幕：开始应用（\(candidate.width)×\(candidate.height)）")
                 try ScreenChangeValidator.validate(candidate, others: self.config.displays)
                 guard let orchestrator = self.orchestrator else { return }
                 var display = candidate
@@ -991,21 +921,4 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return Array(ids.prefix(Int(count)))
     }
 
-    // MARK: - 提示
-
-    private func showInfoAlert(_ title: String, text: String) {
-        DispatchQueue.main.async {
-            let alert = NSAlert()
-            alert.messageText = title
-            alert.informativeText = text
-            alert.runModal()
-        }
-    }
-}
-
-extension AppController.Phase {
-    var isRunning: Bool {
-        if case .running = self { return true }
-        return false
-    }
 }

@@ -2,7 +2,6 @@
 // 由 MoonRiseApp.swift 的 WindowGroup / Window 场景承载（窗口尺寸随内容自适应）。
 // 预设下拉（分组，HiDPI 标记为文字）联动填充；应用 = 校验 → rebuild / create；无删除（在设置窗口屏幕页）。
 
-import AppKit
 import SwiftUI
 import MoonRiseCore
 

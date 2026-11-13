@@ -120,6 +120,7 @@ struct PairingView: View {
     let onClose: () -> Void
 
     @StateObject private var model = PairingModel()
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -135,7 +136,7 @@ struct PairingView: View {
                     .font(.callout)
                 Button("打开 Web UI") {
                     if let url = URL(string: "https://localhost:\(webPort)") {
-                        NSWorkspace.shared.open(url)
+                        openURL(url)
                     }
                 }
             case .primaryGuide:
@@ -146,7 +147,7 @@ struct PairingView: View {
                     .textSelection(.enabled)
                 Button("打开 Web UI") {
                     if let url = URL(string: "https://localhost:\(webPort)") {
-                        NSWorkspace.shared.open(url)
+                        openURL(url)
                     }
                 }
             case .running:

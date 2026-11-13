@@ -41,8 +41,6 @@ enum DiagnosticsModel {
 
     struct Context {
         let screens: [ScreenDiagnostics]
-        let sunshineStatus: String
-        let manager: SunshineManaging
     }
 
     // MARK: - 检查（纯读文件与系统状态，可在后台队列执行）
@@ -81,17 +79,54 @@ enum DiagnosticsModel {
             }
         }
 
-        // 3. Sunshine 安装
-        if let install = context.manager.detect() {
-            rows.append(CheckRow(symbol: "shippingbox", title: "Sunshine 安装",
-                                 detail: install.binaryPath, status: .ok))
-        } else {
-            rows.append(CheckRow(symbol: "shippingbox", title: "Sunshine 安装",
-                                 detail: "未安装——brew tap lizardbyte/homebrew && brew install lizardbyte/homebrew/sunshine",
-                                 status: .err))
+        // 3. 屏幕捕获权限（MoonRise 本进程 preflight，权威；全部实例共用归属）
+        let granted = CapturePermission.granted
+        rows.append(CheckRow(symbol: "lock.shield", title: "屏幕捕获权限（MoonRise）",
+                             detail: granted
+                                 ? "已授予（全部实例共用该归属）"
+                                 : "未授予——权限引导里允许 MoonRise，或系统设置打开 MoonRise 开关",
+                             status: granted ? .ok : .err))
+
+        // 4. Retina 指引（逐屏）
+        for screen in enabledScreens {
+            let spec = screen.spec
+            let note = spec.hiDPI
+                ? "分辨率选 \(spec.logicalWidth)×\(spec.logicalHeight)（“看起来像”）"
+                : "分辨率选 \(spec.width)×\(spec.height)（HiDPI 已关闭）"
+            rows.append(CheckRow(symbol: "text.magnifyingglass", title: "Retina 指引 · \(screen.name)",
+                                 detail: "系统设置 → 显示器 选中 \(spec.name)，\(note)；Moon 端 Moonlight 设 \(spec.width)×\(spec.height)@\(spec.refreshRate) H.264 全屏",
+                                 status: .info))
         }
 
-        // 4. output_name 逐屏一致性：首屏主 conf；扩展屏实例 conf
+        // 5. 外接显示器清单（便于发现 Duet 等虚拟屏干扰）
+        let liveIDs = context.screens.compactMap { $0.isLive ? $0.displayID : nil }
+        let externals = externalDisplaySummary(liveIDs: liveIDs)
+        if externals.isEmpty {
+            rows.append(CheckRow(symbol: "display.2", title: "外接显示器清单",
+                                 detail: "无其他外接显示器", status: .info))
+        } else {
+            rows.append(CheckRow(symbol: "display.2", title: "外接显示器清单",
+                                 detail: externals.joined(separator: "、") + "（如含 Duet 等虚拟屏且不再使用，建议禁用以免混淆）",
+                                 status: .info))
+        }
+
+        return rows
+    }
+
+    /// Sunshine 域检查（Sunshine 页健康检查区）：受管副本就绪 + output_name 逐屏一致性
+    /// （首屏主 conf；扩展屏实例 conf）。文件读操作，后台队列调用。
+    static func sunshineChecks(screens: [ScreenDiagnostics]) -> [CheckRow] {
+        var rows: [CheckRow] = []
+
+        if ManagedSunshineStore.isReady() {
+            rows.append(CheckRow(symbol: "shippingbox", title: "Sunshine 受管副本",
+                                 detail: Paths.managedSunshineBundleURL.path, status: .ok))
+        } else {
+            rows.append(CheckRow(symbol: "shippingbox", title: "Sunshine 受管副本",
+                                 detail: "未获取——设置 → Sunshine 页点「获取」", status: .err))
+        }
+
+        let enabledScreens = screens.filter(\.enabled)
         let mainConfPath = Paths.expandTilde("~/.config/sunshine/sunshine.conf")
         for screen in enabledScreens {
             let expected = screen.displayID.map { String($0) }
@@ -104,25 +139,17 @@ enum DiagnosticsModel {
                                          detail: "\(confPath) → \(expected)", status: .ok))
                 } else {
                     rows.append(CheckRow(symbol: "doc.text", title: "output_name 不一致 · \(screen.name)",
-                                         detail: "配置=\(configured ?? "（无）") 期望=\(expected ?? "（无屏）")；设置通用页点「同步」重新对账",
+                                         detail: "配置=\(configured ?? "（无）") 期望=\(expected ?? "（无屏）")；通用页点「同步」重新对账",
                                          status: .warn))
                 }
             } else {
-                let hint = screen.port == nil ? "（先启动一次 Sunshine）" : "（实例 conf 由 MoonRise 代建，通用页点「同步」即可）"
+                let hint = screen.port == nil ? "（主 conf 由 MoonRise 代建，通用页点「同步」即可）" : "（实例 conf 由 MoonRise 代建，通用页点「同步」即可）"
                 rows.append(CheckRow(symbol: "doc.text", title: "conf 不存在 · \(screen.name)",
                                      detail: confPath + hint, status: .warn))
             }
         }
 
-        // 5. 屏幕捕获权限（MoonRise 本进程 preflight，权威；全部实例共用归属）
-        let granted = CapturePermission.granted
-        rows.append(CheckRow(symbol: "lock.shield", title: "屏幕捕获权限（MoonRise）",
-                             detail: granted
-                                 ? "已授予（全部实例共用该归属）"
-                                 : "未授予——权限引导里允许 MoonRise，或系统设置打开 MoonRise 开关",
-                             status: granted ? .ok : .err))
-
-        // 6. 编码器探测（逐屏日志：首屏主实例日志，扩展屏实例日志）
+        // 编码器探测（逐屏日志：首屏主实例日志，扩展屏实例日志）
         let primaryLog: String = {
             let child = Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path
             return FileManager.default.fileExists(atPath: child)
@@ -133,30 +160,6 @@ enum DiagnosticsModel {
             let logPath = screen.port == nil ? primaryLog : InstanceConf.logURL(for: screen.slotID).path
             rows.append(probeRow(title: "编码器探测 · \(screen.name)", logPath: logPath))
         }
-
-        // 7. Retina 指引（逐屏）
-        for screen in enabledScreens {
-            let spec = screen.spec
-            let note = spec.hiDPI
-                ? "分辨率选 \(spec.logicalWidth)×\(spec.logicalHeight)（“看起来像”）"
-                : "分辨率选 \(spec.width)×\(spec.height)（HiDPI 已关闭）"
-            rows.append(CheckRow(symbol: "text.magnifyingglass", title: "Retina 指引 · \(screen.name)",
-                                 detail: "系统设置 → 显示器 选中 \(spec.name)，\(note)；Moon 端 Moonlight 设 \(spec.width)×\(spec.height)@\(spec.refreshRate) H.264 全屏",
-                                 status: .info))
-        }
-
-        // 8. 外接显示器清单（便于发现 Duet 等虚拟屏干扰）
-        let liveIDs = context.screens.compactMap { $0.isLive ? $0.displayID : nil }
-        let externals = externalDisplaySummary(liveIDs: liveIDs)
-        if externals.isEmpty {
-            rows.append(CheckRow(symbol: "display.2", title: "外接显示器清单",
-                                 detail: "无其他外接显示器", status: .info))
-        } else {
-            rows.append(CheckRow(symbol: "display.2", title: "外接显示器清单",
-                                 detail: externals.joined(separator: "、") + "（如含 Duet 等虚拟屏且不再使用，建议禁用以免混淆）",
-                                 status: .info))
-        }
-
         return rows
     }
 

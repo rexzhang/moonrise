@@ -8,8 +8,21 @@ import MoonRiseCore
 @main
 struct MoonRiseApp: App {
     @NSApplicationDelegateAdaptor(AppController.self) private var appDelegate
+    @StateObject private var panel = PanelModel.shared
 
     var body: some Scene {
+        MenuBarExtra {
+            MenuBarPanelView(model: panel, controller: appDelegate)
+        } label: {
+            switch panel.phase {
+            case .starting, .running:
+                Image(nsImage: BrandGlyph.normal())
+            case .locked, .degraded:
+                Image(nsImage: BrandGlyph.problem())
+            }
+        }
+        .menuBarExtraStyle(.window)
+
         Settings {
             SettingsRootView(model: SettingsCoordinator.shared.model)
         }
@@ -130,5 +143,6 @@ struct AddWindowRootView: View {
             },
             onClose: { dismiss() })
             .navigationTitle("添加屏幕")
+            .onAppear { Log.info("添加屏幕窗口已出现") }
     }
 }
