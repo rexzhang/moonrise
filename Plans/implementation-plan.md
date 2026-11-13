@@ -6,7 +6,7 @@
 
 - host：MacBook Air M4，macOS 27.0.1。需要一块分辨率可设置的虚拟屏幕。
 - Moon（远程 Mac）：MacBook Pro Retina 13" Early 2015（Broadwell，无 HEVC 硬解），原生 2560×1600，默认逻辑 1280×800（恰好 2x 整数），macOS Monterey 12，运行 Moonlight。
-- 本仓库：菜单栏 App（MoonRise，Swift/AppKit）+ 官方 Sunshine（brew，不改源码）。无 CLI。
+- 本仓库：菜单栏 App（MoonRise，Swift/AppKit）+ 官方 Sunshine（受管目录，用户手动从 GitHub Releases 获取，不改源码）。无 CLI。
 - 音频不处理：host 音频在本机播放；Sunshine 侧 stream_audio = disabled（菜单「禁用音频串流」默认勾选，可开关）。
 
 ## 已定决策
@@ -14,7 +14,7 @@
 - 生命周期即进程：App 启动建屏、退出销毁（无确认）并连带停止 Sunshine。无 enabled 配置项。
 - 默认 2560×1600 HiDPI@60；分辨率可配置（菜单预设 + 自定义小窗：W、H、刷新率 30/60/75/120；HiDPI 恒开）。
 - 虚拟屏名 "Moon"，App 名 MoonRise.app（显示名进入身份推导，定后不改）。
-- Sunshine 管理模式：managed 为默认（MoonRise 以子进程独占托管 Sunshine，退出连带停止，异常退避重启；TCC 按责任进程归属 MoonRise）；brewServices 为回退；manual 仅提示。
+- Sunshine 管理：受管目录唯一来源（ManagedSunshineStore 手动获取官方 release：下载→验签→原子换装；未获取 = 锁定态）；MoonRise 以子进程独占托管，退出连带停止，异常退避重启；TCC 按责任进程归属 MoonRise。
 - 开机自启默认关（SMAppService，菜单勾选）。
 - 虚拟屏位置不做程序控制：首次在系统设置手动拖放，macOS 按稳定身份记忆。
 - 单屏 UI，Controller 留多屏余地；仅自用 ad-hoc 签名；Duet 保留但禁用其虚拟屏。
@@ -28,7 +28,7 @@
 5. 生命周期陷阱：创建后任何进程改过该屏模式/排列（CGDisplaySetDisplayMode / CGBeginDisplayConfiguration），release 不再销毁 → 本工具绝不改模式、绝不程序化排列；改分辨率一律销毁重建。创建进程读不到自家虚拟屏的模式缓存 → 状态判断只用 CGGetActiveDisplayList + displayID。
 6. 进程退出（含 SIGKILL）即屏失（WindowServer 回收）→ 菜单栏 App 常驻即持有。
 7. 不装 setTerminationHandler:（退出期回调崩溃风险）；run loop 必须持续运转（AppKit 跑过的进程里，显示器只在 loop 运转时激活）。
-8. Sunshine：AVCaptureScreenInput 按 CGDirectDisplayID 捕获；配置键 output_name（十进制 ID，空=主屏），配置文件 ~/.config/sunshine/sunshine.conf；成功日志 "Configuring selected display (<id>) to stream"。捕获按客户端请求分辨率 aspect 缩放 → 虚拟屏宽高比必须与串流分辨率一致。brew：tap lizardbyte/homebrew，裸二进制 /opt/homebrew/opt/sunshine/bin/sunshine（opt 稳定链接，升级自动指向新版）。音频 tap 非破坏性（CATapUnmuted，host 本地照常出声）。
+8. Sunshine：AVCaptureScreenInput 按 CGDirectDisplayID 捕获；配置键 output_name（十进制 ID，空=主屏），配置文件 ~/.config/sunshine/sunshine.conf；成功日志 "Configuring selected display (<id>) to stream"。捕获按客户端请求分辨率 aspect 缩放 → 虚拟屏宽高比必须与串流分辨率一致。获取：受管目录（~/.config/moonrise/sunshine/Sunshine.app，官方 release 整 bundle；v2026.1112 起 ScreenCaptureKit 捕获为默认，spike S8）。音频 tap 非破坏性（CATapUnmuted，host 本地照常出声）。
 9. Moonlight（Moon 端）：自定义分辨率 2560×1600@60 H.264（Broadwell 无 HEVC 硬解）、码率 60 Mbps、全屏；显示设置保持 Default（恰好 2x）→ 1:1 像素映射全保真。已知 v6.0.0 macOS 自定义分辨率黑边回归（#1301）→ 实测，失败回退预设 + 菜单同步改比例。
 
 ## 项目结构
@@ -59,9 +59,9 @@ displayID → 轮询活动列表（25ms/5s/泵 run loop）。
 
 ## 实现要点
 
-- 配置 ~/.config/moonrise/config.json（Codable，原子写，缺字段回退默认）：display{name,width,height,refreshRate} + sunshine{autoConfigure,configPath,restartPolicy=managed|brewServices|manual}。
-- Sunshine 联动：行级编辑 sunshine.conf 的 output_name 与 stream_audio（其余行逐字节保留，.bak 单份备份）；managed 模式下值变化 → stop+start 应用新配置，值未变 → start 幂等保活；brewServices 模式 → brew services restart；manual 只提示。每次 realize 后自动同步。
-- ChildProcessSunshineManager：opt 稳定路径子进程独占托管；异常退出退避重启（5s→60s 封顶）；Sunshine 自我 fork 孤儿自动接管；首次启动解除 brew services 注册；QT_QPA_PLATFORM=minimal 注入（隐藏托盘图标）；stdout/stderr 落 ~/.local/state/moonrise/sunshine-child.log。
+- 设置存储 ConfigStore（@Observable，UserDefaults 单键 "appConfig" JSON blob，全部修改经 mutate 收口；旧 config.json 首启导入归档）：displays 数组 + sunshine{autoConfigure,configPath,selectedVersion,disableAudioStreaming}。
+- Sunshine 联动：行级编辑 sunshine.conf 的目标键集（其余行逐字节保留，.bak 单份备份）；值变化 → restart 应用新配置，值未变 → start 幂等保活；主 conf 缺失代建。每次 realize 后自动同步。
+- ChildProcessSunshineManager：受管可执行子进程独占托管；异常退出退避重启（5s→60s 封顶）；Sunshine 自我 fork 孤儿自动接管；托盘抑制走 conf 键 system_tray=disabled；stdout/stderr 落 ~/.local/state/moonrise/sunshine-child.log。
 - 状态/错误一律呈现为菜单状态而非崩溃；CGDisplayRegisterReconfigurationCallback + 30s 看门狗兜底。
 - AppController：启动 → 配置 → 可用性检查（失败→菜单错误状态+弹窗）→ 建屏 → Sunshine 联动 → state.json → 回调+看门狗 → RunLoop；退出 → 销毁虚拟屏 + 停止 Sunshine。
 
@@ -88,7 +88,7 @@ displayID → 轮询活动列表（25ms/5s/泵 run loop）。
 | 改过模式/排列后销毁失效 | 绝不改模式、绝不程序化排列；只销毁重建；带盐身份重试 |
 | displayID 漂移 | 每次 realize 后自动重写 output_name；回调+看门狗 |
 | Sunshine 自我 fork 造成双实例 | KeepAlive=false 不重复拉起（fork 以 0 存续）；pgrep 清理外部实例 |
-| brew upgrade 拉起 brew services 双实例 | managed 首启解除 brew services 注册 |
+| 受管目录运行中被破坏 | 实例退避失败 + 看门狗对账 → 锁定态引导重新获取 |
 | 异常退出死循环重启 | launchd ThrottleInterval 节流 + 看门狗 30s 兜底 |
 | Moonlight v6 自定义分辨率黑边 | 实测；回退预设 + 同步改比例 |
 | 非整数缩放发糊 | Moon 固定 Default（恰好 2x） |

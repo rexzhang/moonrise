@@ -21,6 +21,26 @@ public enum Paths {
         home.appendingPathComponent(".config/moonrise/sunshine-instances")
     }
 
+    /// 受管 Sunshine 根目录：~/.config/moonrise/sunshine/
+    public static var managedSunshineDirectory: URL {
+        home.appendingPathComponent(".config/moonrise/sunshine")
+    }
+
+    /// 受管 Sunshine bundle（官方 release 整 bundle 副本，主实例运行源）
+    public static var managedSunshineBundleURL: URL {
+        managedSunshineDirectory.appendingPathComponent("Sunshine.app")
+    }
+
+    /// 受管 Sunshine 内层可执行
+    public static var managedSunshineExecutableURL: URL {
+        managedSunshineBundleURL.appendingPathComponent("Contents/MacOS/sunshine")
+    }
+
+    /// 受管 Sunshine 换装工作区：sunshine/staging/
+    public static var managedSunshineStagingDirectory: URL {
+        managedSunshineDirectory.appendingPathComponent("staging")
+    }
+
     /// 单个实例目录：sunshine-instances/<槽位UUID>/（conf + bin/ + credentials/）
     public static func instanceDirectory(for slotID: UUID) -> URL {
         sunshineInstancesDirectory.appendingPathComponent(slotID.uuidString)

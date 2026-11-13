@@ -27,9 +27,10 @@
 
 ## 进程类
 
-- 两个 Sunshine 冲突：首屏 Sunshine 由 MoonRise 以子进程独占托管（首次启动自动解除 brew services 注册）；扩展屏实例是 MoonRise 主动拉起的独立副本（各自 conf/端口/凭据），清杀按进程归属判定，不会误伤兄弟实例。不要手动另起实例。
-- 客户端看到别的屏的内容（串屏）/ 频繁弹窗断连自动重连：Sunshine 2026.914 的 AVFoundation 捕获路径在 macOS 27 下会错绑虚拟屏并间歇停滞（spike S8 实测）。修复 = 改用带 ScreenCaptureKit 捕获的官方版本（≥2026.1112）：安装官方 Sunshine.app 后在 ~/.config/moonrise/config.json 的 sunshine 段加 `"binaryPath" : "/Applications/Sunshine.app/Contents/MacOS/sunshine"`，重启 MoonRise。删除该键即回退 brew 探测。
-- 换用官方 Sunshine.app 后启动即退 / 托盘报错：官方包 Qt 只带 cocoa 平台插件，config.json 里 `hideTrayIcon` 必须为 false（brew 版无此限制）。
+- 两个 Sunshine 冲突：首屏 Sunshine 由 MoonRise 以子进程独占托管；扩展屏实例是 MoonRise 主动拉起的独立副本（各自 conf/端口/凭据），清杀按进程归属判定，不会误伤兄弟实例。不要手动另起实例；brew services 注册的遗留实例会在实例启动时按归属清杀接管，brew 包本身请自行 `brew uninstall sunshine` 清理。
+- 客户端看到别的屏的内容（串屏）/ 频繁弹窗断连自动重连：Sunshine v2026.1112 之前的 AVFoundation 捕获路径在 macOS 27 下会错绑虚拟屏并间歇停滞（spike S8 实测）。支持的最低版本即 v2026.1112（ScreenCaptureKit 捕获）——在 设置 → Sunshine 页确认已装版本，低于最低版本时点「更新」。
+- 菜单栏显示「Sunshine 未就绪」：受管副本缺失或损坏（唯一合法来源 = 设置 → Sunshine 页的手动获取）。获取前屏幕功能整体禁用；既有 conf/凭据会原样沿用，不影响配对。
+- 获取失败（网络 / 限流 / 验签）：Sunshine 页错误行点名原因——网络失败直接重试；GitHub 限流提示恢复时间后重试；「验签未通过」为拒绝落位的硬校验（签名身份或版本不符），重试同一资产仍失败请到上游 release 页确认资产完整性。
 - MoonRise 退出后屏消失、Sunshine 停止：设计如此（生命周期即进程，含全部扩展屏实例）；重新打开即按上次开关状态恢复。
 - /Library/ColorSync/Profiles/Displays 里的 ICC 文件：每个虚拟屏身份一个，属主 root，属正常副作用，不要手删。
 

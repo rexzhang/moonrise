@@ -2,24 +2,18 @@
 
 ## host 端（本机 Mac）
 
-环境：macOS 13+，Apple Silicon（实测 macOS 27）。
+环境：macOS 14+（实测 macOS 27），Apple Silicon / Intel（按本机架构自动匹配官方包）。
 
 1. 如安装了 Duet Display：先禁用其虚拟屏（iPad 等其他用途不受影响）。
-2. 安装 Sunshine 并锁定版本：
-   ```bash
-   brew tap lizardbyte/homebrew
-   brew install lizardbyte/homebrew/sunshine
-   brew pin sunshine   # 避免自动升级打断
-   ```
-   推荐（替代 brew）：改用官方 Sunshine.app（≥2026.1112，自带 ScreenCaptureKit 捕获，修复 macOS 27 的串屏与断连，spike S8）——安装到 /Applications 后在 ~/.config/moonrise/config.json 的 sunshine 段加 `"binaryPath" : "/Applications/Sunshine.app/Contents/MacOS/sunshine"`，并保持该段 `"hideTrayIcon" : false`（官方包 Qt 无 minimal 插件）。扩展屏实例副本会自动按整 bundle 刷新。
-3. Clone 本仓库后，构建并安装（详见 docs/development.md）：
+2. Clone 本仓库后，构建并安装（详见 docs/development.md）：
    ```bash
    bash scripts/make-cert.sh --trust   # 一次性：生成自签证书（弹框点"始终信任"）
    bash scripts/install-app.sh         # 签名 + 生成 /Applications/MoonRise.app
    open /Applications/MoonRise.app
    ```
-4. 首次启动会自动打开设置窗口的「权限」页：按指引完成「屏幕捕获」与「输入控制」两项授权（授权对象是 MoonRise，Sunshine 以子进程运行按责任进程收权限；给 sunshine 二进制单独授权无效）。
-5. 浏览器打开 https://localhost:47990 创建 Sunshine 账号。
+3. 首次启动：Sunshine 未获取时自动进入锁定态并打开设置窗口「Sunshine」页——点「获取」从 GitHub Releases 下载官方版本（支持的最低版本 v2026.1112，下载自动验签 LizardByte 官方签名），完成后屏幕功能解锁。此前装过 brew 版 Sunshine 的：conf 与凭据原样沿用，无需手工迁移；brew 包本身可用 `brew uninstall sunshine` 清理（MoonRise 不代执行）。
+4. 首次串流前会自动打开设置窗口的「权限」页：按指引完成「屏幕捕获」与「输入控制」两项授权（授权对象是 MoonRise，Sunshine 以子进程运行按责任进程收权限；给 sunshine 二进制单独授权无效）。
+5. 浏览器打开 https://localhost:47990 创建 Sunshine 账号（或走每屏「配对…」窗口的预置引导）。
 6. 开启 Retina（关键）：系统设置 → 显示器 → 选中 "Moon" → 分辨率选 1280×800（“看起来像”），并在同一界面的排列视图中把它拖到主屏旁。分辨率与排列位置要一起调整（改分辨率后排列常会移位），macOS 把两者都按身份记住，此后自动生效。
 
 ## Moon 端（远程 Mac）

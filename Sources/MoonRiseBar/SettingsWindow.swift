@@ -13,6 +13,7 @@ import MoonRiseCore
 enum SettingsPage: String, CaseIterable, Identifiable {
     case general
     case screens
+    case sunshine
     case permission
     case diagnostics
 
@@ -22,6 +23,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "通用"
         case .screens: return "屏幕管理"
+        case .sunshine: return "Sunshine"
         case .permission: return "权限"
         case .diagnostics: return "诊断"
         }
@@ -31,6 +33,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape"
         case .screens: return "rectangle.on.rectangle"
+        case .sunshine: return "arrow.down.circle"
         case .permission: return "lock.shield"
         case .diagnostics: return "stethoscope"
         }
@@ -62,6 +65,20 @@ struct ScreenCallbacks {
     var restartPrimarySunshine: (() -> Void)?
 }
 
+/// Sunshine 页行内动作接线（AppController 组装）。
+struct SunshineCallbacks {
+    /// 获取/更新受管 Sunshine（按 selectedVersion；locked 与 ready 通用）。
+    var acquire: (() -> Void)?
+    /// 重新获取（同 tag 重下）。
+    var refetch: (() -> Void)?
+    /// 检查更新（手动）。
+    var checkUpdates: (() -> Void)?
+    /// 版本列表加载（近 20 条）。
+    var loadReleases: (() -> Void)?
+    /// 版本选择变更（写入 store.selectedVersion）。
+    var setSelectedVersion: ((String) -> Void)?
+}
+
 /// 权限页状态快照（主线程每秒采集）。
 struct PermissionStatusSnapshot {
     let captureGranted: Bool
@@ -91,6 +108,18 @@ final class SettingsModel: ObservableObject {
     @Published var pageContentHeight: CGFloat = 0
     /// 主实例 Web UI 凭据副本路径（配对窗口首屏接管用；AppController 按当前 configPath 注入）。
     var primaryCredentialsURL: URL?
+    // MARK: Sunshine 页状态（refreshScreenModel / acquire 流程驱动）
+    @Published var sunshineReady = true
+    @Published var sunshineInstalledVersion: String?
+    @Published var selectedVersion = "latest"
+    @Published var releases: [ManagedSunshineStore.Release] = []
+    @Published var latestKnown: ManagedSunshineStore.Release?
+    @Published var acquirePhase: ManagedSunshineStore.Phase?
+    @Published var acquireDone: Int64 = 0
+    @Published var acquireTotal: Int64 = 0
+    @Published var sunshineMessage: String?
+    @Published var legacySignal = false
+    var sunshineCallbacks = SunshineCallbacks()
 
     func reportContentSize(_ size: CGSize, for page: SettingsPage) {
         guard size.height.isFinite, size.height > 0 else { return }
@@ -345,6 +374,9 @@ struct SettingsRootView: View {
                 Tab("屏幕管理", systemImage: "rectangle.on.rectangle", value: .screens) {
                     ScreensPageView(model: model)
                 }
+                Tab("Sunshine", systemImage: "arrow.down.circle", value: .sunshine) {
+                    SunshinePageView(model: model)
+                }
                 Tab("权限", systemImage: "lock.shield", value: .permission) {
                     PermissionPageView(model: model)
                 }
@@ -360,6 +392,9 @@ struct SettingsRootView: View {
                 ScreensPageView(model: model)
                     .tabItem { Label("屏幕管理", systemImage: "rectangle.on.rectangle") }
                     .tag(SettingsPage.screens)
+                SunshinePageView(model: model)
+                    .tabItem { Label("Sunshine", systemImage: "arrow.down.circle") }
+                    .tag(SettingsPage.sunshine)
                 PermissionPageView(model: model)
                     .tabItem { Label("权限", systemImage: "lock.shield") }
                     .tag(SettingsPage.permission)
@@ -487,6 +522,150 @@ struct GeneralPageView: View {
     }
 }
 
+// MARK: - Sunshine 页面（受管来源：下载 / 更新 / 重新获取 / 检查更新）
+
+struct SunshinePageView: View {
+    @ObservedObject var model: SettingsModel
+    /// 版本列表是否已加载（展开选择时拉取一次）
+    @State private var releasesLoaded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if model.legacySignal, !model.sunshineReady {
+                Label("检测到既有 Sunshine 配置与凭据（~/.config/sunshine/），获取后将原样沿用，配对不受影响。", systemImage: "tray.full")
+                    .font(.callout)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.1)))
+            }
+            statusSection
+            versionSection
+            if model.acquirePhase != nil {
+                progressSection
+            }
+            if let message = model.sunshineMessage {
+                Text(message)
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+            }
+            if let latest = model.latestKnown, !latest.isSupported {
+                Label("最新发布 \(latest.tag) 低于支持的最低版本 \(ManagedSunshineStore.minimumSupportedVersion)", systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundColor(.orange)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .modifier(ContentSizeReporter { size in model.reportContentSize(size, for: .sunshine) })
+        .task {
+            guard !releasesLoaded else { return }
+            releasesLoaded = true
+            model.sunshineCallbacks.loadReleases?()
+        }
+    }
+
+    private var statusSection: some View {
+        SettingsGroupBox(title: "状态") {
+            RichRow(symbol: "checkmark.seal", title: model.sunshineReady ? "就绪" : "未获取",
+                    detail: model.sunshineReady
+                        ? "来源：~/.config/moonrise/sunshine/Sunshine.app（Apple Silicon/Intel 按本机架构匹配）"
+                        : "尚未获取受管 Sunshine——获取后即可使用屏幕功能") {
+                if model.sunshineReady {
+                    Text("v\(model.sunshineInstalledVersion ?? "?")")
+                        .font(.callout).monospacedDigit()
+                } else {
+                    Text("未安装").font(.callout).foregroundColor(.secondary)
+                }
+            }
+            if !model.sunshineReady {
+                Divider()
+                RichRow(symbol: "arrow.down.circle", title: "获取 Sunshine",
+                        detail: "从 GitHub Releases 下载官方版本并验签安装（需要网络）") {
+                    Button("获取") { model.sunshineCallbacks.acquire?() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.acquirePhase != nil)
+                }
+            }
+        }
+    }
+
+    private var versionSection: some View {
+        SettingsGroupBox(title: "版本 · 支持的最低版本 \(ManagedSunshineStore.minimumSupportedVersion)") {
+            RichRow(symbol: "list.bullet", title: "版本选择",
+                    detail: "跟随最新 release，或钉住具体版本（列表按本机架构标注可获取性）") {
+                Picker("", selection: versionBinding) {
+                    Text("跟随最新").tag("latest")
+                    ForEach(model.releases) { release in
+                        HStack {
+                            Text(release.tag)
+                            if !release.isSupported {
+                                Text("不支持")
+                            }
+                        }
+                        .tag(release.tag)
+                        .disabled(release.downloadURL == nil)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 260)
+                .disabled(model.acquirePhase != nil)
+            }
+            Divider()
+            RichRow(symbol: "square.and.arrow.down", title: model.sunshineReady ? "更新" : "获取",
+                    detail: model.sunshineReady
+                        ? "按所选版本下载并换装（实例将串行重启，串流短暂中断）"
+                        : "下载所选版本并安装为受管副本") {
+                HStack(spacing: 8) {
+                    Button(model.sunshineReady ? "更新" : "获取") { model.sunshineCallbacks.acquire?() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.acquirePhase != nil)
+                    Button("重新获取") { model.sunshineCallbacks.refetch?() }
+                        .disabled(model.sunshineReady != true || model.acquirePhase != nil)
+                    Button("检查更新") { model.sunshineCallbacks.checkUpdates?() }
+                        .disabled(model.acquirePhase != nil)
+                }
+            }
+        }
+    }
+
+    private var progressSection: some View {
+        SettingsGroupBox(title: "下载进度 · \(phaseText)") {
+            VStack(alignment: .leading, spacing: 6) {
+                if model.acquirePhase == .downloading, model.acquireTotal > 0 {
+                    ProgressView(value: Double(model.acquireDone), total: Double(model.acquireTotal))
+                    Text("\(model.acquireDone / 1_048_576) / \(model.acquireTotal / 1_048_576) MB")
+                        .font(.caption).foregroundColor(.secondary).monospacedDigit()
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private var phaseText: String {
+        switch model.acquirePhase {
+        case .fetching: return "查询版本"
+        case .downloading: return "下载中"
+        case .extracting: return "提取"
+        case .verifying: return "验签"
+        case .swapping: return "换装（实例重启）"
+        case .none: return ""
+        }
+    }
+
+    private var versionBinding: Binding<String> {
+        Binding(
+            get: { model.selectedVersion },
+            set: { newValue in
+                model.selectedVersion = newValue
+                model.sunshineCallbacks.setSelectedVersion?(newValue)
+            })
+    }
+}
+
 // MARK: - 屏幕页面
 
 struct ScreensPageView: View {
@@ -494,11 +673,33 @@ struct ScreensPageView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        content
+            .overlay {
+                if !model.sunshineReady {
+                    // 锁定态：无 Sunshine 无屏——遮罩说明并引导 Sunshine 页
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            Label("Sunshine 未就绪，屏幕功能暂不可用", systemImage: "arrow.down.circle")
+                                .font(.callout.weight(.medium))
+                            Button("打开 Sunshine 页") {
+                                model.page = .sunshine
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .padding(24)
+                    }
+                }
+            }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
             ipSection
             HStack {
                 Button("添加屏幕…") { openWindow(id: "moonrise.add") }
                     .buttonStyle(.borderedProminent)
+                    .disabled(!model.sunshineReady)
                 Spacer()
                 Text("状态每秒自动刷新")
                     .font(.caption)
@@ -515,6 +716,7 @@ struct ScreensPageView: View {
                     error: model.errors[display.id],
                     callbacks: model.callbacks,
                     openWindow: openWindow)
+                    .disabled(!model.sunshineReady)
             }
         }
         .padding(16)

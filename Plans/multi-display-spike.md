@@ -68,3 +68,4 @@
 5. 官方包 Qt 静态链接且只带 cocoa 平台插件（无 minimal）：MoonRise 的 hideTrayIcon（QT_QPA_PLATFORM=minimal）会令其启动即退（"no Qt platform plugin could be initialized"）。现行折中 hideTrayIcon=false（cocoa 正常，Sunshine 托盘图标可见，每实例一个）。
 6. 主实例二进制路径新增 sunshine.binaryPath 配置覆盖（AppConfig.SunshineConfig；nil = brew 自动探测回退，路径不可执行时记错误日志并回退）。
 7. 诊断教训：MoonRise info 级 os_log 不落盘，`log show` 查不到实例 spawn/退出详情——必须 `log stream --level info` 实时抓取（troubleshooting 已有记载，实测再次验证）。
+8. 托盘抑制正解（2026-11-13 实测）：上游 conf 键 `system_tray`（默认 true，v2026.1112.40957 src/config.cpp:1891 起）写 disabled 后进程跳过主线程事件循环（src/main.cpp:156-162），托盘不创建、串流正常——S8 第 5 条的 Qt minimal 插件死结就此解除。to_bool 语义：仅 true/yes/enabled/on/含 "1" 为真，其余为假。

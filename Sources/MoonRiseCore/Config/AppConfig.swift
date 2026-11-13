@@ -71,41 +71,26 @@ public struct AppConfig: Codable, Equatable, Sendable {
     public struct SunshineConfig: Codable, Equatable, Sendable {
         public var autoConfigure: Bool
         public var configPath: String
-        public var restartPolicy: RestartPolicy
 
-        public enum RestartPolicy: String, Codable, Sendable {
-            /// 由 App 编排：brew services start/stop/restart（回退模式）
-            case brewServices
-            /// 由 MoonRise 以子进程独占托管 Sunshine（默认；退出连带停止）
-            case managed
-            /// 只写配置，不重启（提示手动重启）
-            case manual
-        }
+        /// Sunshine 获取策略："latest"（跟随最新 release）或钉住具体 tag（如 "v2026.1112.40957"）
+        public var selectedVersion: String
 
         /// 启动 Sunshine 时禁用音频串流（sunshine.conf 的 stream_audio），默认开启
         public var disableAudioStreaming: Bool
-        /// 隐藏 Sunshine 的菜单栏托盘图标（QT_QPA_PLATFORM=minimal），默认开启
-        public var hideTrayIcon: Bool
-        /// 主实例二进制路径覆盖（nil = brew 自动探测）；扩展屏实例副本随之刷新
-        public var binaryPath: String?
 
-        public init(autoConfigure: Bool = true, configPath: String = "~/.config/sunshine/sunshine.conf", restartPolicy: RestartPolicy = .managed, disableAudioStreaming: Bool = true, hideTrayIcon: Bool = true, binaryPath: String? = nil) {
+        public init(autoConfigure: Bool = true, configPath: String = "~/.config/sunshine/sunshine.conf", selectedVersion: String = "latest", disableAudioStreaming: Bool = true) {
             self.autoConfigure = autoConfigure
             self.configPath = configPath
-            self.restartPolicy = restartPolicy
+            self.selectedVersion = selectedVersion
             self.disableAudioStreaming = disableAudioStreaming
-            self.hideTrayIcon = hideTrayIcon
-            self.binaryPath = binaryPath
         }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             autoConfigure = try c.decodeIfPresent(Bool.self, forKey: .autoConfigure) ?? true
             configPath = try c.decodeIfPresent(String.self, forKey: .configPath) ?? "~/.config/sunshine/sunshine.conf"
-            restartPolicy = try c.decodeIfPresent(RestartPolicy.self, forKey: .restartPolicy) ?? .managed
+            selectedVersion = try c.decodeIfPresent(String.self, forKey: .selectedVersion) ?? "latest"
             disableAudioStreaming = try c.decodeIfPresent(Bool.self, forKey: .disableAudioStreaming) ?? true
-            hideTrayIcon = try c.decodeIfPresent(Bool.self, forKey: .hideTrayIcon) ?? true
-            binaryPath = try c.decodeIfPresent(String.self, forKey: .binaryPath)
         }
     }
 

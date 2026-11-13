@@ -29,7 +29,7 @@ public struct RestartBackoff {
 /// TCC 归属：子进程的屏幕捕获/辅助功能按"责任进程"归属 MoonRise.app，
 /// 由 scripts/make-cert.sh 生成的自签代码签名证书（MoonRiseDev）保证
 /// 跨重建稳定——ad-hoc 签名每次重建 cdhash 变化会导致授权失效。
-/// 主实例走 /opt/homebrew/opt/sunshine/bin/sunshine（opt 稳定符号链接）。
+/// 主实例走受管目录（Paths.managedSunshineExecutableURL，ManagedSunshineStore 落位）。
 public final class ChildProcessSunshineManager: SunshineManaging {
 
     public enum RunState: Equatable {
@@ -45,7 +45,6 @@ public final class ChildProcessSunshineManager: SunshineManaging {
     private let binPath: String
     private let confPath: String
     private let logURL: URL
-    private let hideTrayIcon: Bool
 
     private var process: Process?
     private var startedAt: Date?
@@ -53,15 +52,10 @@ public final class ChildProcessSunshineManager: SunshineManaging {
     private var backoff = RestartBackoff()
     private var runState: RunState = .idle
 
-    /// brew services 迁移为进程级一次性（多实例不再逐个执行）
-    private static var brewMigrationDone = false
-    private static let brewMigrationLock = NSLock()
-
-    public init(binPath: String, confPath: String, logURL: URL, hideTrayIcon: Bool = true, label: String = "Sunshine") {
+    public init(binPath: String, confPath: String, logURL: URL, label: String = "Sunshine") {
         self.binPath = binPath
         self.confPath = confPath
         self.logURL = logURL
-        self.hideTrayIcon = hideTrayIcon
         self.label = label
         try? Paths.ensureParentDirectory(of: logURL)
     }
@@ -69,7 +63,7 @@ public final class ChildProcessSunshineManager: SunshineManaging {
     // MARK: - SunshineManaging
 
     public func detect() -> SunshineInstallInfo? {
-        BrewServicesSunshineManager.detectBinary().map { SunshineInstallInfo(binaryPath: $0) }
+        FileManager.default.isExecutableFile(atPath: binPath) ? SunshineInstallInfo(binaryPath: binPath) : nil
     }
 
     public func start() throws {
@@ -127,7 +121,6 @@ public final class ChildProcessSunshineManager: SunshineManaging {
 
     private func startLocked() throws {
         if case .running = runState { return }  // 幂等
-        Self.migrateAwayFromBrewServicesIfNeeded()
         // 外部实例清杀：排除 MoonRise 全家族（兄弟实例同路径副本属正常形态，D16）
         let foreign = ManagedProcessFamily.shared.foreign(from: SunshineProcessDiscovery.findCandidates())
         if !foreign.isEmpty {
@@ -143,14 +136,6 @@ public final class ChildProcessSunshineManager: SunshineManaging {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: binPath)
         p.arguments = [confPath]
-        if hideTrayIcon {
-            // Qt 托盘是 Sunshine 唯一的 GUI 用途；minimal 平台下托盘创建失败
-            // 且 Sunshine 优雅继续（捕获/编码/Web UI 均不走 Qt）——图标从
-            // 菜单栏消失，"退出 Sunshine" 的旁路入口也随之消失
-            var env = ProcessInfo.processInfo.environment
-            env["QT_QPA_PLATFORM"] = "minimal"
-            p.environment = env
-        }
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
         if let handle = try? FileHandle(forWritingTo: logURL) {
             try? handle.seekToEnd()
@@ -212,27 +197,6 @@ public final class ChildProcessSunshineManager: SunshineManaging {
                     _ = try? self.spawnLocked()
                 }
             }
-        }
-    }
-
-    /// 一次性迁移：解除 brew services 注册，防 brew upgrade 拉起双实例
-    private static func migrateAwayFromBrewServicesIfNeeded() {
-        brewMigrationLock.lock()
-        defer { brewMigrationLock.unlock() }
-        guard !brewMigrationDone else { return }
-        brewMigrationDone = true
-        guard let brew = BrewServicesSunshineManager.detectBrew() else { return }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: brew)
-        p.arguments = ["services", "stop", "sunshine"]
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
-        do {
-            try p.run()
-            p.waitUntilExit()
-            Log.info("brew services stop sunshine → 退出码 \(p.terminationStatus)")
-        } catch {
-            Log.error("brew services stop 失败：\(error.localizedDescription)")
         }
     }
 }

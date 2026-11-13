@@ -9,8 +9,9 @@ import MoonRiseCore
 final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 状态
 
-    fileprivate enum Phase {
+    fileprivate enum Phase: Equatable {
         case starting
+        case locked          // Sunshine 未获取：不建屏/不启实例，引导设置窗口 Sunshine 页
         case running
         case degraded(message: String)
     }
@@ -29,7 +30,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let instanceStatus: String
     }
 
-    private var config = AppConfig.load()
+    private let store = ConfigStore()
+    /// 设置读取快照（写侧一律经 store.mutate）
+    private var config: AppConfig { store.config }
+    private let sunshineStore = ManagedSunshineStore()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private var virtualController: VirtualDisplayController?
@@ -46,29 +50,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 生命周期
 
     override init() {
-        if let binPath = Self.resolvePrimaryBinaryPath(config) {
-            sunshineManager = ChildProcessSunshineManager(
-                binPath: binPath,
-                confPath: Paths.expandTilde(config.sunshine.configPath),
-                logURL: Paths.stateDirectory.appendingPathComponent("sunshine-child.log"),
-                hideTrayIcon: config.sunshine.hideTrayIcon)
-        } else {
-            let brewPath = BrewServicesSunshineManager.detectBrew() ?? "/opt/homebrew/bin/brew"
-            sunshineManager = BrewServicesSunshineManager(brewPath: brewPath)
-        }
+        sunshineManager = ChildProcessSunshineManager(
+            binPath: Paths.managedSunshineExecutableURL.path,
+            confPath: Paths.expandTilde(store.config.sunshine.configPath),
+            logURL: Paths.stateDirectory.appendingPathComponent("sunshine-child.log"))
         super.init()
-    }
-
-    /// 主实例二进制路径：配置覆盖优先（须为可执行文件），否则 brew 探测。
-    private static func resolvePrimaryBinaryPath(_ config: AppConfig) -> String? {
-        if let override = config.sunshine.binaryPath {
-            let expanded = Paths.expandTilde(override)
-            if FileManager.default.isExecutableFile(atPath: expanded) {
-                return expanded
-            }
-            Log.error("sunshine.binaryPath 不可执行，回退 brew 探测：\(expanded)")
-        }
-        return BrewServicesSunshineManager.detectBinary()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -80,48 +66,65 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshMenu()
 
         runBusy {
-            do {
-                let controller = try VirtualDisplayController()
-                let registry = SunshineInstanceRegistry(
-                    sourceBinaryPath: Self.resolvePrimaryBinaryPath(self.config) ?? "",
-                    hideTrayIcon: self.config.sunshine.hideTrayIcon)
-                let orchestrator = DisplayOrchestrator(
-                    controller: controller,
-                    registry: registry,
-                    primaryManager: self.sunshineManager,
-                    configProvider: { [weak self] in self?.config ?? AppConfig() },
-                    liveDisplayIDs: { [weak self] in self?.liveIDs() ?? [] })
-                orchestrator.streamMonitor.onStreamingChanged = { [weak self] _, _ in
-                    DispatchQueue.main.async {
-                        self?.refreshMenu()
-                        self?.writeState()
-                    }
+            // Sunshine 就绪判定唯一来源：受管副本（ManagedSunshineStore.isReady）。
+            // 未获取 → 锁定态：不建屏/不启实例/不同步 conf，引导设置窗口 Sunshine 页。
+            guard ManagedSunshineStore.isReady() else {
+                self.phase = .locked
+                Log.info("Sunshine 未获取：进入锁定态，打开设置窗口 Sunshine 页")
+                DispatchQueue.main.async {
+                    self.refreshMenu()
+                    self.showSettings(page: .sunshine)
                 }
-                orchestrator.streamMonitor.start()
-                self.virtualController = controller
-                self.registry = registry
-                self.orchestrator = orchestrator
-
-                self.registerReconfigurationCallback()
-                // 权限引导：屏幕捕获或输入控制缺失时自动打开设置窗口「权限」页
-                self.lastCapturePermission = CapturePermission.granted
-                if !CapturePermission.granted || !CapturePermission.inputControlGranted {
-                    DispatchQueue.main.async { self.showSettings(page: .permission) }
-                    Log.info("屏幕捕获/输入控制权限缺失：已打开设置窗口权限页")
-                }
-                if self.config.keepHostScaling {
-                    HostDisplayModeKeeper.snapshot()   // Moon 建屏前记录 host 显示模式基线
-                }
-                try orchestrator.reconcile()
-                if self.config.keepHostScaling {
-                    HostDisplayModeKeeper.restoreAll() // 拓扑变化后恢复 host 缩放
-                }
-                self.phase = .running
-                self.cleanupOrphanInstanceDirectories()
-                self.startWatchdog()
-            } catch {
-                self.degrade(error: error)
+                return
             }
+            self.startRunning()
+        }
+    }
+
+    /// 就绪路径：建编排栈 → 权限引导 → 建屏起实例 → 看门狗。
+    /// 启动与「获取/更新 Sunshine 完成」共用（后台队列调用）。
+    private func startRunning() {
+        do {
+            let controller = try VirtualDisplayController()
+            let registry = SunshineInstanceRegistry(
+                sourceBinaryPath: Paths.managedSunshineExecutableURL.path)
+            let orchestrator = DisplayOrchestrator(
+                controller: controller,
+                registry: registry,
+                primaryManager: self.sunshineManager,
+                configProvider: { [weak self] in self?.store.config ?? AppConfig() },
+                liveDisplayIDs: { [weak self] in self?.liveIDs() ?? [] })
+            orchestrator.streamMonitor.onStreamingChanged = { [weak self] _, _ in
+                DispatchQueue.main.async {
+                    self?.refreshMenu()
+                    self?.writeState()
+                }
+            }
+            orchestrator.streamMonitor.start()
+            self.virtualController = controller
+            self.registry = registry
+            self.orchestrator = orchestrator
+
+            self.registerReconfigurationCallback()
+            // 权限引导：屏幕捕获或输入控制缺失时自动打开设置窗口「权限」页
+            self.lastCapturePermission = CapturePermission.granted
+            if !CapturePermission.granted || !CapturePermission.inputControlGranted {
+                DispatchQueue.main.async { self.showSettings(page: .permission) }
+                Log.info("屏幕捕获/输入控制权限缺失：已打开设置窗口权限页")
+            }
+            if self.config.keepHostScaling {
+                HostDisplayModeKeeper.snapshot()   // Moon 建屏前记录 host 显示模式基线
+            }
+            try orchestrator.reconcile()
+            if self.config.keepHostScaling {
+                HostDisplayModeKeeper.restoreAll() // 拓扑变化后恢复 host 缩放
+            }
+            self.phase = .running
+            self.cleanupOrphanInstanceDirectories()
+            self.startWatchdog()
+            self.refreshMenu()
+        } catch {
+            self.degrade(error: error)
         }
     }
 
@@ -261,14 +264,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(statusMenuItem())
 
         // 每屏一行：状态图标反映屏幕状态（串流中/空闲/未启用/离线），点击整行反转启用（D2）
+        // 锁定态下每屏行禁用（无 Sunshine 无屏）
+        let locked = phase == .locked
         for summary in screenSummaries() {
             let item = NSMenuItem(
-                title: "\(summary.name) · \(summary.state.label)",
+                title: "\(summary.name) · \(locked ? "未就绪" : summary.state.label)",
                 action: #selector(toggleScreenMenuItem(_:)),
                 keyEquivalent: "")
             item.target = self
             item.representedObject = summary.slotID.uuidString
-            item.isEnabled = !busy
+            item.isEnabled = !busy && !locked
             // 状态图标（圆点体系）：串流中 = 绿实心圆；空闲 = 绿空心圈；未启用 = 灰空心圈；离线 = 橙实心圆
             let icon: (symbol: String, color: NSColor)
             switch summary.state {
@@ -302,22 +307,30 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func statusMenuItem() -> NSMenuItem {
-        let item = NSMenuItem(title: "启动中…", action: nil, keyEquivalent: "")
-        item.isEnabled = false
         switch phase {
         case .starting:
-            item.title = "启动中…"
+            let item = NSMenuItem(title: "启动中…", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            return item
+        case .locked:
+            let item = NSMenuItem(title: "Sunshine 未就绪 — 点击设置", action: #selector(openSunshineSettings(_:)), keyEquivalent: "")
+            item.target = self
+            return item
         case .running:
+            let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            item.isEnabled = false
             let summaries = screenSummaries()
             let enabledCount = summaries.filter(\.enabled).count
             let streamingCount = summaries.filter { $0.state == .streaming }.count
             let instancesTotal = summaries.filter { $0.enabled }.count
             let instancesRunning = summaries.filter { $0.enabled && $0.instanceStatus != "未运行" }.count
             item.title = "\(enabledCount) 屏 · 串流 \(streamingCount) · 实例 \(instancesRunning)/\(instancesTotal)"
+            return item
         case .degraded(let message):
-            item.title = "错误：\(message)"
+            let item = NSMenuItem(title: "错误：\(message)", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            return item
         }
-        return item
     }
 
     private var loginItemStatus: NSControl.StateValue {
@@ -332,7 +345,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch phase {
         case .starting, .running:
             image = BrandGlyph.normal()
-        case .degraded:
+        case .locked, .degraded:
             image = BrandGlyph.problem()
         }
         statusItem.button?.image = image
@@ -342,6 +355,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openSettings(_ sender: NSMenuItem) {
         showSettings()
+    }
+
+    @objc private func openSunshineSettings(_ sender: NSMenuItem) {
+        showSettings(page: .sunshine)
     }
 
     /// 菜单屏幕行点击：反转该屏启用（失败弹错误框）。
@@ -364,6 +381,110 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // MARK: - Sunshine 受管获取
+
+    /// 获取/更新受管 Sunshine：下载 → 验签 → 停运行栈 → 原子换装 → 重建就绪栈。
+    /// tag = nil 跟随最新；force=true（重新获取）语义相同（同 tag 重下）。
+    private func acquireSunshine(force: Bool) {
+        let model = SettingsCoordinator.shared.model
+        guard model.acquirePhase == nil else { return }
+        model.sunshineMessage = nil
+        let tag = config.sunshine.selectedVersion == "latest" ? nil : config.sunshine.selectedVersion
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            do {
+                let staged = try await self.sunshineStore.acquire(tag: tag) { phase, done, total in
+                    DispatchQueue.main.async {
+                        model.acquirePhase = phase
+                        model.acquireDone = done
+                        model.acquireTotal = total
+                    }
+                }
+                self.stopRunningStack()
+                DispatchQueue.main.async { model.acquirePhase = .swapping }
+                try self.sunshineStore.swapIn(stagedBundle: staged)
+                UserDefaults.standard.set(true, forKey: "sunshine.migrationDone")
+                self.startRunning()
+                DispatchQueue.main.async {
+                    model.acquirePhase = nil
+                    model.sunshineMessage = "已就绪" + (ManagedSunshineStore.installedVersion().map { " v\($0)" } ?? "")
+                    self.refreshScreenModel()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    model.acquirePhase = nil
+                    model.sunshineMessage = "获取失败：\(error.localizedDescription)"
+                    self.refreshScreenModel()
+                }
+            }
+        }
+    }
+
+    /// 换装前停机：销屏 + 串行停全部实例 + 清编排栈（回锁定态直至新副本就绪）。
+    private func stopRunningStack() {
+        guard phase == .running else { return }
+        orchestrator?.shutdown()
+        for display in config.displays where display.sunshinePort != nil {
+            if let manager = registry?.managerIfExists(for: display.id) {
+                try? manager.stop()
+            }
+        }
+        try? sunshineManager.stop()
+        watchdog?.invalidate()
+        watchdog = nil
+        virtualController = nil
+        registry = nil
+        orchestrator = nil
+        phase = .locked
+        refreshMenu()
+    }
+
+    /// 检查更新（手动）：releases/latest 与已装版本比较。
+    private func checkSunshineUpdates() {
+        let model = SettingsCoordinator.shared.model
+        model.sunshineMessage = nil
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            do {
+                let latest = try await self.sunshineStore.fetchLatest()
+                DispatchQueue.main.async {
+                    model.latestKnown = latest
+                    let installedTag = ManagedSunshineStore.installedVersion().map { "v" + $0 }
+                    switch (ManagedSunshineStore.isReady(), installedTag) {
+                    case (true, .some(let installed)) where latest.tag == installed:
+                        model.sunshineMessage = "已是最新版本"
+                    case (true, .some(let installed)) where ManagedSunshineStore.isVersion(latest.tag, atLeast: installed):
+                        model.sunshineMessage = "有新版本 \(latest.tag)，点「更新」安装"
+                    case (true, .some(let installed)):
+                        model.sunshineMessage = "已装版本 \(installed) 晚于最新发布"
+                    default:
+                        model.sunshineMessage = "最新版本 \(latest.tag)，点「获取」安装"
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    model.sunshineMessage = "检查更新失败：\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    /// 版本列表加载（版本选择展开时；近 20 条）。
+    private func loadSunshineReleases() {
+        let model = SettingsCoordinator.shared.model
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            do {
+                let releases = try await self.sunshineStore.fetchReleases(limit: 20)
+                DispatchQueue.main.async { model.releases = releases }
+            } catch {
+                DispatchQueue.main.async {
+                    model.sunshineMessage = "版本列表加载失败：\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     @objc private func restartAllInstances() {
         runBusy {
             try? self.sunshineManager.restart()
@@ -379,8 +500,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 禁用音频串流（设置通用页）：值变才重启受影响实例（精确到实例）。
     private func toggleAudioStreaming(disabled: Bool) {
         guard config.sunshine.disableAudioStreaming != disabled else { return }
-        config.sunshine.disableAudioStreaming = disabled
-        try? config.save()
+        store.mutate { $0.sunshine.disableAudioStreaming = disabled }
         resyncAll()
     }
 
@@ -452,7 +572,27 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 loginItemEnabled: login,
                 lanAddresses: lan)
             model.primaryCredentialsURL = primaryCredentialsURL
+            model.sunshineReady = ManagedSunshineStore.isReady()
+            model.sunshineInstalledVersion = ManagedSunshineStore.installedVersion()
+            model.selectedVersion = self.config.sunshine.selectedVersion
+            model.legacySignal = self.hasLegacySunshineSignal()
+                && !UserDefaults.standard.bool(forKey: "sunshine.migrationDone")
         }
+    }
+
+    /// 存量 Sunshine 形态检测：旧 config(.imported) 含 binaryPath，或主 conf/凭据目录存在。
+    private func hasLegacySunshineSignal() -> Bool {
+        let fm = FileManager.default
+        for name in ["config.json", "config.json.imported"] {
+            let url = Paths.configURL.deletingLastPathComponent().appendingPathComponent(name)
+            if let data = try? Data(contentsOf: url),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let sunshine = object["sunshine"] as? [String: Any],
+               sunshine["binaryPath"] != nil {
+                return true
+            }
+        }
+        return fm.fileExists(atPath: Paths.expandTilde(AppConfig().sunshine.configPath))
     }
 
     private func wireScreenCallbacks() {
@@ -474,8 +614,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.addScreen(candidate, reportError: reportError)
             },
             setKeepHostScaling: { [weak self] enabled in
-                self?.config.keepHostScaling = enabled
-                try? self?.config.save()
+                self?.store.mutate { $0.keepHostScaling = enabled }
             },
             setDisableAudioStreaming: { [weak self] disabled in self?.toggleAudioStreaming(disabled: disabled) },
             setLoginItem: { [weak self] enabled in self?.setLoginItem(enabled) },
@@ -491,6 +630,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             restartPrimarySunshine: { [weak self] in
                 DispatchQueue.global(qos: .userInitiated).async {
                     try? self?.sunshineManager.restart()
+                }
+            })
+        model.sunshineCallbacks = SunshineCallbacks(
+            acquire: { [weak self] in self?.acquireSunshine(force: false) },
+            refetch: { [weak self] in self?.acquireSunshine(force: true) },
+            checkUpdates: { [weak self] in self?.checkSunshineUpdates() },
+            loadReleases: { [weak self] in self?.loadSunshineReleases() },
+            setSelectedVersion: { [weak self] version in
+                self?.store.mutate { $0.sunshine.selectedVersion = version }
+                DispatchQueue.main.async {
+                    SettingsCoordinator.shared.model.selectedVersion = version
                 }
             })
         model.diagnosticsProvider = { [weak self] completion in
@@ -526,9 +676,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         runBusy {
             do {
                 try ScreenChangeValidator.validate(display, others: self.config.displays)
-                guard let idx = self.config.displays.firstIndex(where: { $0.id == display.id }) else { return }
-                self.config.displays[idx] = display
-                try? self.config.save()
+                guard self.config.displays.contains(where: { $0.id == display.id }) else { return }
+                self.store.mutate { config in
+                    guard let idx = config.displays.firstIndex(where: { $0.id == display.id }) else { return }
+                    config.displays[idx] = display
+                }
                 try self.orchestrator?.setEnabled(display)
             } catch {
                 Log.error("启用/停用失败：\(error.localizedDescription)")
@@ -559,8 +711,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         runBusy {
             do {
                 try self.orchestrator?.remove(slotID: display.id)
-                self.config.displays.removeAll { $0.id == display.id }
-                try? self.config.save()
+                self.store.mutate { config in
+                    config.displays.removeAll { $0.id == display.id }
+                }
                 try? FileManager.default.removeItem(at: InstanceConf.directory(for: display.id))
                 // 编辑窗口监听 displays 变化自动关闭（原 closeEdit 语义）
             } catch {
@@ -587,10 +740,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     sunshinePort: display.sunshinePort)
                 try ScreenChangeValidator.validate(
                     defaults, others: self.config.displays.filter { $0.id != display.id })
-                guard let idx = self.config.displays.firstIndex(where: { $0.id == display.id }) else { return }
-                let wasEnabled = self.config.displays[idx].enabled
-                self.config.displays[idx] = defaults
-                try? self.config.save()
+                var wasEnabled = false
+                self.store.mutate { config in
+                    guard let idx = config.displays.firstIndex(where: { $0.id == display.id }) else { return }
+                    wasEnabled = config.displays[idx].enabled
+                    config.displays[idx] = defaults
+                }
                 Self.removePrimaryCredentials(configPath: self.config.sunshine.configPath)
                 if wasEnabled {
                     // conf 值变（sunshine_name / output_name）→ 重启主实例，读已清空凭据 = 新装状态
@@ -617,13 +772,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         runBusy {
             do {
                 try ScreenChangeValidator.validate(newDisplay, others: self.config.displays)
-                guard let idx = self.config.displays.firstIndex(where: { $0.id == newDisplay.id }) else {
+                var before: DisplayConfig?
+                self.store.mutate { config in
+                    guard let idx = config.displays.firstIndex(where: { $0.id == newDisplay.id }) else { return }
+                    before = config.displays[idx]
+                    config.displays[idx] = newDisplay
+                }
+                guard let before else {
                     reportError("屏幕不存在")
                     return
                 }
-                let before = self.config.displays[idx]
-                self.config.displays[idx] = newDisplay
-                try? self.config.save()
                 if before.enabled != newDisplay.enabled {
                     try self.orchestrator?.setEnabled(newDisplay)
                 } else if newDisplay.enabled {
@@ -653,8 +811,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         userInfo: [NSLocalizedDescriptionKey: "可用端口段已用尽，无法新增屏幕"])
                 }
                 display.sunshinePort = port
-                self.config.displays.append(display)
-                try? self.config.save()
+                self.store.mutate { config in
+                    config.displays.append(display)
+                }
                 try orchestrator.create(display)
                 Log.info("新增屏幕：\(display.name) \(display.width)x\(display.height) 端口 \(port)")
                 reportError(nil)   // 成功：关闭添加窗口

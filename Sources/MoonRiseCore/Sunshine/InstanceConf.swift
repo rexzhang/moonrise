@@ -78,7 +78,7 @@ public enum InstanceConf {
     /// 实例 conf 目标键值。首屏（sunshinePort == nil）走主 conf，不适用，返回 [:]。
     /// 键集：output_name / stream_audio / port / sunshine_name / log_path / pkey / cert /
     /// credentials_file（Web UI 凭据存储）/ file_state（配对状态——不写则落到全局默认路径，
-    /// 与主实例及其它实例互相污染）。
+    /// 与主实例及其它实例互相污染）/ system_tray（托盘抑制）。
     public static func targetValues(for display: DisplayConfig, outputName: UInt32, audioDisabled: Bool) -> [String: String] {
         guard display.sunshinePort != nil else { return [:] }
         let credentials = credentialsDirectory(for: display.id)
@@ -92,6 +92,7 @@ public enum InstanceConf {
             "cert": credentials.appendingPathComponent("cacert.pem").path,
             "credentials_file": credentialsFileURL(for: display.id).path,
             "file_state": credentialsFileURL(for: display.id).path,
+            "system_tray": "disabled",
         ]
     }
 

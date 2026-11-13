@@ -48,9 +48,10 @@ final class InstanceConfTests: XCTestCase {
         XCTAssertEqual(values["credentials_file"], InstanceConf.credentialsFileURL(for: slotID).path)
         XCTAssertEqual(values["file_state"], InstanceConf.credentialsFileURL(for: slotID).path)
         XCTAssertEqual(values["log_path"], InstanceConf.logURL(for: slotID).path)
+        XCTAssertEqual(values["system_tray"], "disabled", "托盘抑制恒写 disabled（上游 system_tray 键）")
         XCTAssertEqual(Set(values.keys), [
             "output_name", "stream_audio", "port", "sunshine_name",
-            "log_path", "pkey", "cert", "credentials_file", "file_state",
+            "log_path", "pkey", "cert", "credentials_file", "file_state", "system_tray",
         ])
         XCTAssertTrue(values["pkey"]!.contains(slotID.uuidString), "凭据必须落在实例目录内（自包含）")
         XCTAssertTrue(values["file_state"]!.contains(slotID.uuidString), "配对状态必须自包含于实例目录（不写 file_state 会落到全局默认路径）")

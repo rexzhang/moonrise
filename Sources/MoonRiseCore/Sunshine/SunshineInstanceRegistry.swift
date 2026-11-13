@@ -6,15 +6,13 @@ public final class SunshineInstanceRegistry {
     private let lock = NSLock()
     private var instances: [UUID: ChildProcessSunshineManager] = [:]
     private let sourceBinaryPath: String
-    private let hideTrayIcon: Bool
 
-    public init(sourceBinaryPath: String, hideTrayIcon: Bool) {
+    public init(sourceBinaryPath: String) {
         self.sourceBinaryPath = sourceBinaryPath
-        self.hideTrayIcon = hideTrayIcon
     }
 
     /// 取/建指定槽位的实例管理器（懒建：先落实二进制副本，D16）。
-    /// 建实例需在后台队列调用（复制 ~17MB + 哈希校验）。
+    /// 建实例需在后台队列调用（复制 bundle + 哈希校验）。
     public func manager(for display: DisplayConfig) throws -> ChildProcessSunshineManager {
         lock.lock()
         defer { lock.unlock() }
@@ -27,7 +25,6 @@ public final class SunshineInstanceRegistry {
             binPath: binary.path,
             confPath: InstanceConf.confURL(for: display.id).path,
             logURL: InstanceConf.logURL(for: display.id),
-            hideTrayIcon: hideTrayIcon,
             label: display.name)
         instances[display.id] = manager
         return manager

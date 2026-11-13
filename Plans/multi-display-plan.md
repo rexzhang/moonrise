@@ -31,10 +31,10 @@ Spike 实测结论（2026-11-10，详见 Plans/multi-display-spike.md）：双�
 - D10 逐屏开关：每屏一个启用开关（enabled），持久化于 config.json，重启后按上次状态恢复。停用 = 停该屏实例 + 销该屏 + 配置槽位保留（编号/名称/端口/规格冻结不变）；启用 = 按既有槽位重建建屏起实例。收敛只对已启用屏 diff；看门狗与回调不复活停用屏。首屏可停用不可删除，停用时主实例一并停止（防 output_name 指向不存在的屏而回退捕获 host 屏）。
 - D11 名称对应：实例 conf 写 sunshine_name = 屏幕显示名（主 conf 同样写首屏名，所有屏一致对待），创建时冻结、随改名同步更新并只重启该实例；客户端连接后显示的主机名即屏名（spike 实测有效）。
 - D12 串流可见：逐实例日志监控（log_path 按实例分流——spike 实测有效）判定串流中/空闲；菜单栏状态聚合行 + 每屏状态行标记（● 串流中 / ○ 空闲 / ○ 未启用 / ▲ 离线）。刷新机制 = 逐实例日志尾随（近实时、秒级）识别串流开始/结束 + 看门狗 30s 周期对账兜底；日志不可达按空闲显示并在诊断提示。
-- D13 brew 混合编排：首屏维持 brew services 编排（现状不变）；第 2..N 屏实例不受 restartPolicy 影响、一律由 MoonRise 子进程托管；文档注明"多屏实例与 brew services 编排不兼容（brew 仅支持单实例），扩展屏实例由 MoonRise 自行托管"。
+- D13 托管编排：首屏与第 2..N 屏实例一律由 MoonRise 子进程托管（受管目录来源，ManagedSunshineStore 获取）。
 - D14 输入与音频：多客户端并发输入不限制（spike 实测各归各屏、无串扰）；音频串流保持全局开关，同一值写入主 conf 与全部实例 conf，不提供按屏音频开关。
 - D15 操作语义：无确认对话框，后果提示置于控件文案（如"删除（将中断串流）"、改名旁静态警示）。新增屏选预设即创建（立即建屏起实例）；删除屏为标记式（卡片置灰标注"应用时删除"，可再点撤销），统一「应用」执行；配置类改动（名称/分辨率/刷新率/HiDPI/启用开关）一律走统一「应用」，只提交改动屏；运维动作（重启该屏 / 打开 Web UI / 复制 IP:端口）即时执行。删除屏时清理实例目录（含二进制副本与凭据）。
-- D16 捕获路径序列化对策（spike S7）：同二进制路径的并发捕获被 macOS 27 串行化（第二进程永久挂起）→ 每实例独立二进制副本路径（见 D1），实例启动时校验副本与源二进制一致（brew 升级后跟随刷新）；实现期必做验证：MoonRise 归属下 spawn 两个不同路径副本并发捕获，若归属级序列化仍存在则架构回退评估（单实例 + 串流目标切换，需求降级）。
+- D16 捕获路径序列化对策（spike S7）：同二进制路径的并发捕获被 macOS 27 串行化（第二进程永久挂起）→ 每实例独立二进制副本路径（见 D1），实例启动时校验副本与源二进制一致（源升级后跟随刷新）；实现期必做验证：MoonRise 归属下 spawn 两个不同路径副本并发捕获，若归属级序列化仍存在则架构回退评估（单实例 + 串流目标切换，需求降级）。
 
 ## 分项任务
 
@@ -54,7 +54,7 @@ Spike 实测结论（2026-11-10，详见 Plans/multi-display-spike.md）：双�
 
 ### R3 Sunshine 多实例（已完成：Core 能力 + 56 项单测全绿；App 接线在 R4）
 
-已落地：ConfFile createsIfMissing（实例 conf 代建）；InstanceConf（目录/键集/PortAllocator/bind 探测/二进制副本 SHA-256 校验刷新）；SunshineProcessDiscovery + ManagedProcessFamily（ppid 家族排除清杀）；ChildProcessSunshineManager 实例化（label、家族排除、brew 迁移进程级一次）；SunshineInstanceRegistry（懒建实例、二进制副本）；SunshineSync.syncInstance（逐实例 conf 同步，缺失代建）；StreamStateMonitor（日志尾随，标记行 spike 实测口径）。
+已落地：ConfFile createsIfMissing（实例 conf 代建）；InstanceConf（目录/键集/PortAllocator/bind 探测/二进制副本 SHA-256 校验刷新）；SunshineProcessDiscovery + ManagedProcessFamily（ppid 家族排除清杀）；ChildProcessSunshineManager 实例化（label、家族排除）；SunshineInstanceRegistry（懒建实例、二进制副本）；SunshineSync.syncInstance（逐实例 conf 同步，缺失代建）；StreamStateMonitor（日志尾随，标记行 spike 实测口径）。
 实例串行启动/重启由编排层保证（R4）。
 D16 验收 ✅ 通过（2026-11-10 真实 App 实测）：/Applications/MoonRise.app（MoonRiseDev 签名）同时托管主实例（brew 路径，Moon 1 2560×1600）与扩展屏实例（独立副本路径，Moon 2 2048×1536 iPad mini 4），两个子进程均归属 MoonRise 并各自通过编码器探测（双 "Found H.264 encoder"），端口 48089 独立监听，实例目录 UUID 与配置一致。
 
@@ -92,9 +92,9 @@ D16 验收 ✅ 通过（2026-11-10 真实 App 实测）：/Applications/MoonRise
 ## 验证
 
 - 每任务：swift build && swift test；菜单栏 → 诊断… 核对运行状态。
-- R3 验收：双实例共存、双客户端并发串流 ≥10 分钟（spike 已验证同构场景）、逐实例日志分流、串行启动无互卡、MoonRise 归属双子进程并发捕获（D16）、displayID 漂移逐实例重写、brew 模式混合编排。
+- R3 验收：双实例共存、双客户端并发串流 ≥10 分钟（spike 已验证同构场景）、逐实例日志分流、串行启动无互卡、MoonRise 归属双子进程并发捕获（D16）、displayID 漂移逐实例重写。
 - R4 验收：菜单每屏状态行与实际一致且点击定位窗口、统一窗口应用流（多屏改动一次提交只重建改动屏、删除标记可撤销）、逐屏停用/启用往返、重启后开关状态保持、增删屏不打断其它屏串流、改分辨率只重建目标屏、改名记忆重置警示与 sunshine_name 同步、配对引导完整走通、旧配置升级迁移。
-- 回归：单屏路径（首屏 + 主 conf + brew 回退模式）行为不变。
+- 回归：单屏路径（首屏 + 主 conf）行为不变。
 
 ## 约定
 

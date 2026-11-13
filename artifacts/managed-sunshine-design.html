@@ -1,0 +1,537 @@
+<title>Sunshine 受管整合设计</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #f4f5f8;
+  --fg: #1c2230;
+  --muted: #5a6472;
+  --panel: #ffffff;
+  --line: #d9dee6;
+  --accent: #3d56cc;
+  --accent-soft: #e8ecfb;
+  --warn: #946200;
+  --warn-soft: #f6ecd8;
+  --err: #b3372f;
+  --err-soft: #f7e6e4;
+  --ok: #2e7d46;
+  --ok-soft: #e3f0e8;
+  --code-bg: #eceff5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171e;
+    --fg: #e7eaf0;
+    --muted: #98a2b3;
+    --panel: #1c212b;
+    --line: #2c3442;
+    --accent: #8fa2f5;
+    --accent-soft: #232b41;
+    --warn: #d9a441;
+    --warn-soft: #2e2918;
+    --err: #e07b72;
+    --err-soft: #3a211f;
+    --ok: #6fc28f;
+    --ok-soft: #1b2e23;
+    --code-bg: #10131a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171e;
+  --fg: #e7eaf0;
+  --muted: #98a2b3;
+  --panel: #1c212b;
+  --line: #2c3442;
+  --accent: #8fa2f5;
+  --accent-soft: #232b41;
+  --warn: #d9a441;
+  --warn-soft: #2e2918;
+  --err: #e07b72;
+  --err-soft: #3a211f;
+  --ok: #6fc28f;
+  --ok-soft: #1b2e23;
+  --code-bg: #10131a;
+  color-scheme: dark;
+}
+/* 布局概念：单列阅读栏（≈68ch）承载正文与结构卡；mermaid 流程区块独立突破栏宽，
+   按 900/1200/1600px 三档上限自适应；UI mockup 固定窗口比例居中。 */
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.75 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+}
+.wrap { max-width: 920px; margin: 0 auto; padding-block: 40px 72px; }
+h1, h2, h3 { font-family: "Noto Serif SC", serif; line-height: 1.3; }
+h1 { font-size: 30px; margin: 0 0 6px; }
+h2 { font-size: 21px; margin: 48px 0 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 26px 0 8px; }
+p { margin: 8px 0; }
+.lede { color: var(--muted); margin-bottom: 22px; }
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; }
+code { background: var(--code-bg); border-radius: 5px; padding: 1px 5px; }
+a { color: var(--accent); }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); font-weight: 600; white-space: nowrap; }
+td code { white-space: nowrap; }
+ul { margin: 6px 0; padding-left: 22px; }
+li { margin: 3px 0; }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin: 14px 0;
+}
+.card h4 { margin: 0 0 8px; font-size: 13.5px; font-family: "IBM Plex Mono", monospace; letter-spacing: .3px; }
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
+.badge {
+  display: inline-block; border-radius: 5px; padding: 1px 8px;
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+}
+.b-ok { background: var(--ok-soft); color: var(--ok); }
+.b-warn { background: var(--warn-soft); color: var(--warn); }
+.b-err { background: var(--err-soft); color: var(--err); }
+.b-acc { background: var(--accent-soft); color: var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 12px 0; font-size: 12.5px; color: var(--muted); }
+.legend span::before { content: "■ "; }
+/* 流程区块：突破栏宽，三档上限 */
+.figure {
+  margin: 18px calc((100vw - min(920px, 100vw)) / -2);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 12px;
+}
+.figure .mermaid { display: flex; justify-content: center; overflow-x: auto; }
+.mermaid svg { max-width: 100%; height: auto; }
+@media (min-width: 980px) { .figure { margin-inline: -60px; } }
+@media (min-width: 1340px) { .figure { margin-inline: -160px; } }
+@media (min-width: 1740px) { .figure { margin-inline: -300px; max-width: calc(100% + 600px); } }
+/* UI mockup：macOS 设置窗口 */
+.mock { max-width: 640px; margin: 18px auto; }
+.window {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-shadow: 0 10px 34px rgba(0,0,0,.14);
+  overflow: hidden;
+}
+.win-titlebar {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 14px; border-bottom: 1px solid var(--line);
+  background: var(--code-bg);
+}
+.dot { width: 11px; height: 11px; border-radius: 50%; }
+.dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+.win-title { margin: 0 auto; font-size: 12.5px; color: var(--muted); transform: translateX(-18px); }
+.tabbar { display: flex; gap: 4px; justify-content: center; padding: 9px 10px 7px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tab {
+  font-size: 12px; color: var(--muted); border-radius: 6px; padding: 3px 12px;
+}
+.tab.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.win-body { padding: 14px 18px 18px; display: grid; gap: 12px; }
+.blk { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; }
+.blk-label { font-size: 11px; letter-spacing: .6px; color: var(--muted); margin-bottom: 7px; }
+.kv { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 3px 0; font-size: 13px; flex-wrap: wrap; }
+.kv .k { color: var(--muted); }
+.btn {
+  display: inline-block; border-radius: 7px; padding: 4px 14px; font-size: 12.5px;
+  border: 1px solid var(--line); color: var(--fg); background: var(--panel);
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn[disabled] { opacity: .45; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; font-size: 12px; }
+.seg span { padding: 3px 12px; }
+.seg .on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.progress { height: 6px; border-radius: 4px; background: var(--code-bg); overflow: hidden; margin: 7px 0 4px; }
+.progress i { display: block; height: 100%; width: 64%; background: var(--accent); }
+.note-bar { border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
+.note-bar.warn { background: var(--warn-soft); color: var(--warn); }
+.note-bar.acc { background: var(--accent-soft); color: var(--accent); }
+/* 菜单栏 mockup */
+.menubar-strip {
+  max-width: 640px; margin: 12px auto 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 14px; display: flex; justify-content: flex-end; gap: 14px;
+  font-size: 12.5px; color: var(--muted);
+}
+.menu-drop {
+  max-width: 360px; margin: 8px auto 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+  box-shadow: 0 8px 26px rgba(0,0,0,.12); padding: 5px 6px; font-size: 13px;
+}
+.mi { display: flex; justify-content: space-between; gap: 14px; padding: 4px 10px; border-radius: 5px; }
+.mi.hl { background: var(--accent); color: #fff; }
+.mi.dis { color: var(--muted); opacity: .6; }
+.mi .dot { width: 8px; height: 8px; margin: auto 0; }
+/* 遮罩 mockup */
+.overlay-demo { position: relative; }
+.overlay-demo .veil {
+  position: absolute; inset: 0; border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-size: 12.5px; color: var(--fg); text-align: center; flex-wrap: wrap;
+  backdrop-filter: blur(1px);
+}
+.skel { color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+@media (max-width: 640px) {
+  .figure { margin-inline: -6px; }
+  h1 { font-size: 25px; }
+}
+</style>
+
+<div class="wrap">
+<h1>Sunshine 受管整合设计</h1>
+<p class="lede">受管目录 + 手动 GitHub Releases 获取 · UserDefaults 统一设置存储 · brew 移除 · 未就绪锁定态 · system_tray 托盘抑制</p>
+
+<div class="legend">
+  <span style="color:var(--accent)">重点：数据结构</span>
+  <span style="color:var(--accent)">重点：交互流程</span>
+  <span style="color:var(--accent)">重点：界面设计与接口契约</span>
+  <span>错误与冲突处理：概览级</span>
+</div>
+<p class="meta-row">
+  <span>plan：artifacts/managed-sunshine-design.plan.md</span>
+  <span>实测依据：Plans/multi-display-spike.md S8</span>
+  <span>日期：2026-11-13</span>
+</p>
+
+<h2>S0 概览</h2>
+<p>Sunshine 二进制来源唯一化为受管目录（官方 release 整 bundle），获取仅由用户在设置窗口手动触发；设置全部收敛到 UserDefaults 单源（ConfigStore）；brew 支持整体移除；Sunshine 未就绪时全 App 进入锁定态并用上游原生 system_tray 键抑制托盘。总体状态只有两态，瞬态阶段（下载/验签/换装）是 Sunshine 页内的任务进度，不是就绪状态：</p>
+
+<div class="figure">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --> locked : 启动 · 受管目录缺失或验签不过
+    [*] --> ready : 启动 · 受管目录就绪
+    locked --> ready : 用户手动获取成功（下载→验签→换装）
+    ready --> ready : 更新换装成功（旧版被替换）
+    ready --> ready : 更新失败（旧版保留，报错呈现）
+    note right of locked
+        全程不建屏 / 不启实例 / 不同步 conf
+        菜单栏锁定行 · 屏幕管理页遮罩
+    end note
+    note right of ready
+        建屏 · 实例 · conf 同步 · 托盘(system_tray=disabled)
+    end note
+</pre>
+</div>
+
+<h2>S1 数据结构</h2>
+
+<h3>ConfigStore（新组件）</h3>
+<div class="card">
+<h4>ConfigStore（@Observable，MoonRiseCore/Config/ConfigStore.swift）</h4>
+<table>
+<tr><th>成员</th><th>类型</th><th>语义</th></tr>
+<tr><td><code>current</code></td><td><code>AppConfig</code></td><td>只读快照；编排层 configProvider 与菜单/页面读取入口</td></tr>
+<tr><td><code>mutate(_:)</code></td><td><code>(inout AppConfig) -&gt; Void</code></td><td>唯一写通道：改 → UserDefaults 持久化 → Observation 通知</td></tr>
+<tr><td><code>readiness</code>（关联派生）</td><td>由 ManagedSunshineStore 提供</td><td>锁定/就绪判定（见 S2 状态机）</td></tr>
+</table>
+<p style="color:var(--muted);font-size:12.5px">持久化 = UserDefaults 标准 suite 单键 <code>appConfig</code>（JSON blob，原子写语义不变）；AppConfig 值类型与解析容错逻辑原样保留。设置窗口/菜单不再触碰 AppController 私有 config。</p>
+</div>
+
+<h3>AppConfig schema（演变后）</h3>
+<div class="card">
+<h4>AppConfig（Codable struct，字段级）</h4>
+<table>
+<tr><th>字段</th><th>类型</th><th>默认</th><th>约束 / 来源</th></tr>
+<tr><td><code>displays</code></td><td><code>[DisplayConfig]</code></td><td>Moon 1 单槽</td><td>不变；槽位 UUID/名称/规格/端口/启用</td></tr>
+<tr><td><code>keepHostScaling</code></td><td><code>Bool</code></td><td><code>true</code></td><td>不变</td></tr>
+<tr><td><code>sunshine.configPath</code></td><td><code>String</code></td><td><code>~/.config/sunshine/sunshine.conf</code></td><td>不变；Sunshine 自身约定路径</td></tr>
+<tr><td><code>sunshine.autoConfigure</code></td><td><code>Bool</code></td><td><code>true</code></td><td>不变；SunshineSync 功能开关</td></tr>
+<tr><td><code>sunshine.disableAudioStreaming</code></td><td><code>Bool</code></td><td><code>true</code></td><td>不变</td></tr>
+<tr><td><code>sunshine.selectedVersion</code></td><td><code>String</code></td><td><code>"latest"</code></td><td>新增；<code>"latest"</code> 或具体 tag（<code>"v2026.1112.40957"</code>）；检查更新与重新获取的比较基准</td></tr>
+<tr><td><code>sunshine.restartPolicy</code> / <code>hideTrayIcon</code> / <code>binaryPath</code></td><td>—</td><td>—</td><td>字段删除；旧 JSON 残留键被解码器忽略</td></tr>
+</table>
+<p style="color:var(--muted);font-size:12.5px">Package.swift 平台目标上调 <code>.macOS(.v14)</code>（@Observable 依赖）。</p>
+</div>
+
+<h3>UserDefaults 键清单</h3>
+<table>
+<tr><th>键</th><th>类型</th><th>语义</th></tr>
+<tr><td><code>appConfig</code></td><td>Data（JSON blob）</td><td>全部设置（上表 schema）</td></tr>
+<tr><td><code>sunshine.migrationDone</code></td><td>Bool</td><td>操作标志：legacy 迁移提示已处理（独立于设置 blob）</td></tr>
+</table>
+<p style="color:var(--muted);font-size:12.5px">不进 store：state.json（运行态事实）、SMAppService（系统自管）、Sunshine 实例凭据文件。首启迁移：检测旧 <code>~/.config/moonrise/config.json</code> → 导入 blob → 原文件改名归档 <code>config.json.imported</code>。</p>
+
+<h3>conf 目标键集（ConfFile 行级编辑，值变才重启精确到实例）</h3>
+<table>
+<tr><th>键集</th><th>键（类型均为 String）</th><th>system_tray 值语义</th></tr>
+<tr><td>主 conf（4 键）</td><td><code>output_name</code> / <code>stream_audio</code> / <code>sunshine_name</code> / <code>system_tray</code></td><td rowspan="2">恒写 <code>disabled</code>；上游 to_bool 仅认 true/yes/enabled/on/含"1"，其余为假（v2026.1112.40957 src/config.cpp:1891）→ 托盘不创建且跳过主线程事件循环（src/main.cpp:156-162）。主 conf 缺失时 MoonRise 代建（键取默认值）。</td></tr>
+<tr><td>实例 conf（10 键）</td><td>主 conf 四键 + <code>port</code> / <code>log_path</code> / <code>pkey</code> / <code>cert</code> / <code>credentials_file</code> / <code>file_state</code></td></tr>
+</table>
+
+<h3>受管目录布局与迁移映射</h3>
+<div class="card">
+<h4>~/.config/moonrise/sunshine/（新建，Paths.swift 扩展）</h4>
+<pre class="mono" style="white-space:pre-wrap;margin:4px 0">sunshine/
+├── Sunshine.app/            # 受管整 bundle（官方 release 拷贝，主实例运行源）
+└── staging/                 # 下载/挂载/换装工作区（成功即清空，失败急切清理）</pre>
+<table>
+<tr><th>存量形态（检测信号）</th><th>迁移动作</th></tr>
+<tr><td>config.json 含 <code>binaryPath</code>（本机现状：指向官方 app）</td><td rowspan="2">Sunshine 页迁移提示条 → 用户手动获取受管副本；conf/凭据原地沿用（路径不变，无文件搬移）；旧 binaryPath 键被解码器忽略</td></tr>
+<tr><td><code>~/.config/sunshine/</code> 存在 conf/credentials（brew 或官方版本遗留）</td></tr>
+</table>
+</div>
+
+<h2>S2 交互流程</h2>
+
+<h3>状态机：SunshineReadiness</h3>
+<p>就绪判定只有两态，且唯一来源是受管副本：brew 遗留、手动安装于任意位置的官方 app、损坏/缺失的受管目录一律视为未获取（等同首次获取，走锁定态与引导流程）；下载/验签/换装全部是任务瞬态，呈现于 Sunshine 页进度区，不改变 readiness：</p>
+<div class="figure">
+<pre class="mermaid">
+stateDiagram-v2
+    direction LR
+    state 判定条件 {
+        locked : locked（未就绪）
+        ready : ready（就绪）
+    }
+    [*] --> 判定条件 : 启动解析受管目录
+    判定条件 : 受管副本存在（获取流程落位）
+    判定条件 : 落位时验签通过
+    判定条件 : 且内层二进制可执行
+</pre>
+</div>
+
+<h3>时序 1：首次获取（锁定态引导 → 就绪）</h3>
+<div class="figure">
+<pre class="mermaid">
+sequenceDiagram
+    participant U as 用户
+    participant P as 设置窗口·Sunshine页
+    participant M as ManagedSunshineStore
+    participant G as GitHub API
+    participant A as AppController/编排
+    A->>P: 启动解析失败 → 自动打开 Sunshine 页（锁定）
+    U->>P: 选版本（跟随最新 / 具体 tag）→ 点「获取」
+    P->>M: download(selectedVersion)
+    M->>G: GET releases/latest（或按 tag 查列表）
+    G-->>M: assets[] → Sunshine-macOS-arm64.dmg
+    M->>G: 下载 DMG（进度回调 → 页面进度区）
+    M->>M: hdiutil 挂载 → cp -R → codesign 验签（TeamID + 版本核对）
+    alt 验签失败 / 下载失败
+        M->>M: detach + 清理 staging
+        M-->>P: 失败态文案（手动重试）
+    else 通过
+        M->>A: 停全部实例（串行，锁定态本就无实例）
+        M->>M: 原子换装 → 受管目录就位
+        M->>A: readiness 翻转 → 建屏 / 起实例 / 副本 SHA 刷新
+        M-->>P: 就绪（版本徽标 + 来源路径更新）
+    end
+</pre>
+</div>
+
+<h3>时序 2：更新换装（ready 态，实例在跑）</h3>
+<div class="figure">
+<pre class="mermaid">
+sequenceDiagram
+    participant U as 用户
+    participant P as 设置窗口·Sunshine页
+    participant M as ManagedSunshineStore
+    participant A as AppController/编排
+    participant I as Sunshine 实例（主+扩展）
+    U->>P: 检查更新 → 有新版 → 点「更新」
+    P->>M: download(新版 tag)
+    M-->>P: 下载+验签完成（staging 就绪）
+    M->>A: 停全部实例（串行；主 conf 值未变不触发误重启）
+    A->>I: SIGTERM → 等待退出（串行逐个）
+    M->>M: 原子换装（旧目录改名遗留后删除）
+    M->>A: registry forget 全部 → 按配置重建
+    A->>I: 重启实例 → ensureBinaryCopy 检测 SHA 不一致 → 整 bundle 副本刷新
+    A-->>U: 串流恢复（客户端自动重连）
+</pre>
+</div>
+
+<h3>时序 3：迁移收编（存量机器）</h3>
+<div class="figure">
+<pre class="mermaid">
+sequenceDiagram
+    participant U as 用户
+    participant P as 设置窗口·Sunshine页
+    participant M as ManagedSunshineStore
+    participant C as ~/.config/sunshine/
+    A->>P: 启动检测 legacy 信号（binaryPath 键 / conf+credentials 存在）
+    P-->>U: 迁移提示条「检测到既有 Sunshine 配置与凭据，将原样沿用」
+    U->>P: 点「获取」（受管副本）
+    P->>M: download(selectedVersion)
+    M-->>P: 换装完成（同时序 1）
+    P->>C: 无任何文件操作（conf/凭据/配对原地沿用）
+    note over P,C: 迁移不视为已获取——获取成功前维持锁定态，既有二进制不参与就绪判定
+    A->>A: 主 conf 同步（键集含 system_tray）→ 首屏凭据预置（provisionCredentialsIfNeeded）
+</pre>
+</div>
+
+<h3>时序 4：检查更新（手动，无自动触发）</h3>
+<div class="figure">
+<pre class="mermaid">
+sequenceDiagram
+    participant U as 用户
+    participant P as 设置窗口·Sunshine页
+    participant M as ManagedSunshineStore
+    participant G as GitHub API
+    U->>P: 点「检查更新」
+    P->>M: checkLatest()
+    M->>G: GET releases/latest
+    G-->>M: tag_name + assets
+    M->>M: 与 selectedVersion 语义比较（latest=比已装版本；钉住=比所选 tag）
+    alt 已装 < 最新
+        M-->>P: 「有新版本 vX（含 ≥v2026.1112 警示规则）」+ 更新按钮高亮
+    else 已是最新
+        M-->>P: 「已是最新」
+    end
+</pre>
+</div>
+
+<h2>S3 接口契约</h2>
+
+<h3>GitHub Releases API</h3>
+<table>
+<tr><th>项</th><th>契约</th></tr>
+<tr><td>端点</td><td><code>GET https://api.github.com/repos/SunshineStream/Sunshine/releases/latest</code>；<code>GET …/releases?per_page=20</code>（版本列表，过滤 draft 不取、prerelease 仅列出不默认选中）</td></tr>
+<tr><td>认证 / 限流</td><td>免认证；60 次/时/IP；仅手动触发，无轮询。HTTP 403（rate limit）→ 呈现限流提示（读 <code>X-RateLimit-Reset</code> 显示剩余分钟）+ 手动重试</td></tr>
+<tr><td>资产匹配（芯片类型）</td><td><code>name == "Sunshine-macOS-\(arch).dmg"</code>；arch ∈ {arm64, x86_64}（<code>ProcessInfo().machine</code> 映射）；取 <code>browser_download_url</code> 与 <code>size</code>（进度分母）。release 缺本机架构资产 → 该版本不可获取，版本列表标注且不可发起下载</td></tr>
+<tr><td>最低支持版本</td><td>常量 <code>v2026.1112</code>（S8：此前的 AVFoundation 捕获路径在 macOS 27 有串屏/停滞缺陷）；UI 固定说明 + 列表低于该值标注「不支持」+ 选择/安装时警示条（不阻断）</td></tr>
+<tr><td>tag 解析</td><td><code>vYYYY.MMDD.序号</code> 数字分段比较（版本新旧判定与 ≥v2026.1112 警示共用）</td></tr>
+<tr><td>下载</td><td>URLSession downloadTask（自动跟随 objects.githubusercontent.com 跳转）；失败不自动重试，呈现错误态 + 手动重试</td></tr>
+</table>
+
+<h3>验签契约（拒绝落位的硬校验）</h3>
+<table>
+<tr><th>步骤</th><th>命令 / 读取</th><th>通过判据</th></tr>
+<tr><td>身份</td><td><code>codesign -dv &lt;bundle&gt;</code></td><td><code>TeamIdentifier=F8XQ7XCN2R</code>（LizardByte Developer ID）</td></tr>
+<tr><td>版本</td><td>Info.plist <code>CFBundleShortVersionString</code></td><td>与所请求 tag 版本段一致（<code>v2026.1112.40957</code> → <code>2026.1112.40957</code>）</td></tr>
+<tr><td>可执行</td><td>内层二进制 POSIX 0755 + <code>FileManager.isExecutableFile</code></td><td>真</td></tr>
+</table>
+<p style="color:var(--muted);font-size:12.5px">任一不符：拒绝落位、detach、清 staging、页面错误态。验签使任何下载镜像路径安全（不过验签即不可信）。</p>
+
+<h3>hdiutil 提取链</h3>
+<table>
+<tr><th>步骤</th><th>命令</th><th>失败处置</th></tr>
+<tr><td>挂载</td><td><code>hdiutil attach -nobrowse -readonly -mountpoint &lt;staging/mnt&gt; &lt;dmg&gt;</code></td><td>清 staging，错误态呈现</td></tr>
+<tr><td>提取</td><td><code>cp -R &lt;mnt&gt;/Sunshine.app &lt;staging&gt;/</code></td><td>同上</td></tr>
+<tr><td>卸载</td><td><code>hdiutil detach &lt;staging/mnt&gt; -quiet</code></td><td>急切清理分支必经（成功/失败都执行）</td></tr>
+</table>
+
+<h3>换装契约（与现有机制的衔接）</h3>
+<ul>
+<li>原子换装：旧 <code>Sunshine.app</code> 改名遗留 → 新目录 <code>mv</code> 就位 → 删遗留（同盘 rename 原子性）。</li>
+<li>换装前停全部实例（串行，逐个 SIGTERM → 等待退出）；主 conf 值未变不触发 conf 变更重启。</li>
+<li>换装后 registry forget 全部 → 按配置重建：实例副本由 <code>InstanceConf.ensureBinaryCopy</code> 按 SHA-256 对锚自动整 bundle 刷新（S8 既有机制）。</li>
+<li>启动解析（非更新路径）：受管目录存在 + 内层二进制可执行 → ready；否则 locked（不验签重跑，信任落位时验签）。</li>
+</ul>
+
+<h2>S4 界面设计</h2>
+
+<h3>设置窗口 · Sunshine 页（mockup）</h3>
+<div class="mock">
+<div class="window">
+  <div class="win-titlebar"><i class="dot r"></i><i class="dot y"></i><i class="dot g"></i><span class="win-title">MoonRise 设置</span></div>
+  <div class="tabbar">
+    <span class="tab">通用</span><span class="tab">屏幕</span><span class="tab on">Sunshine</span><span class="tab">权限</span><span class="tab">诊断</span>
+  </div>
+  <div class="win-body">
+    <div class="note-bar acc">检测到既有 Sunshine 配置与凭据（~/.config/sunshine/），获取后将原样沿用，配对不受影响。</div>
+    <div class="blk">
+      <div class="blk-label">状态</div>
+      <div class="kv"><span class="k">受管 Sunshine</span><span><span class="badge b-ok">就绪</span>&nbsp; <span class="badge b-acc">v2026.1112.40957</span></span></div>
+      <div class="kv"><span class="k">来源路径</span><span class="mono">~/.config/moonrise/sunshine/Sunshine.app</span></div>
+      <div class="kv"><span class="k">本机芯片</span><span class="mono">Apple Silicon（arm64）</span></div>
+    </div>
+    <div class="blk">
+      <div class="blk-label">版本 · 支持的最低版本 v2026.1112</div>
+      <div class="kv"><span class="k">版本选择</span><span class="seg"><span class="on">跟随最新</span><span>选择版本…</span></span></div>
+      <div class="kv"><span class="k">最新版本</span><span>v2026.1112.40957（11-12 发布）</span></div>
+      <div class="kv"><span class="k">列表示例</span><span>v2026.1112.40957（11-12）&nbsp;·&nbsp; v2026.1112.13541（11-12）&nbsp;·&nbsp; v2026.914.233613（09-15）<span class="badge b-err">不支持</span></span></div>
+      <div class="kv"><span class="k">&nbsp;</span><span><span class="btn primary">更新</span>&nbsp; <span class="btn">检查更新</span>&nbsp; <span class="btn">重新获取</span></span></div>
+    </div>
+    <div class="blk">
+      <div class="blk-label">下载进度 · 正在验签</div>
+      <div class="progress"><i></i></div>
+      <div class="kv"><span class="k mono">Sunshine-macOS-arm64.dmg</span><span class="mono">37.2 / 58.3 MB</span></div>
+    </div>
+    <div class="note-bar warn">所选版本低于 v2026.1112：该版本之前的捕获路径在 macOS 27 存在串屏与断连缺陷（S8），建议使用 v2026.1112 或更新版本。</div>
+  </div>
+</div>
+</div>
+<p style="color:var(--muted);font-size:12.5px">警示条与迁移提示条按状态条件出现；「选择版本…」展开近 20 条正式 release 列表（tag + 发布日期）。SwiftUI 实现，系统控件 + macOS 27 设计语言。</p>
+
+<h3>菜单栏 · 锁定态与就绪态</h3>
+<div class="menubar-strip"><span>⌘ 12:05</span><span>☀︎</span><span style="color:var(--accent);font-weight:600">MoonRise ▾</span></div>
+<div class="menu-drop">
+  <div class="mi hl"><span>Sunshine 未就绪 — 打开设置</span></div>
+  <div class="mi dis"><span>◻ Moon 1 · 未就绪</span></div>
+  <div class="mi dis"><span>◻ Moon 2 · 未就绪</span></div>
+  <div class="mi"><span>Sunshine</span><span>›</span></div>
+  <div class="mi"><span>设置…</span></div>
+  <div class="mi"><span>诊断…</span></div>
+  <div class="mi"><span>退出</span></div>
+</div>
+<p style="color:var(--muted);font-size:12.5px">锁定态：聚合行替换为引导行（点击打开 Sunshine 页），每屏行禁用。就绪态维持现有形态不变。</p>
+
+<h3>屏幕管理页 · 锁定遮罩</h3>
+<div class="mock">
+<div class="window">
+  <div class="win-titlebar"><i class="dot r"></i><i class="dot y"></i><i class="dot g"></i><span class="win-title">MoonRise 设置 — 屏幕</span></div>
+  <div class="win-body">
+    <div class="blk overlay-demo">
+      <div class="skel">卡片：Moon 1 · moon-rex-mbp · 2560×1600 · 启用</div>
+      <div class="skel">卡片：Moon 2 · moon-rex-ipadmini4 · 2048×1536 · 启用</div>
+      <div class="skel">＋ 添加屏幕　　　　　　　　［应用］</div>
+      <div class="veil"><span>Sunshine 未就绪，屏幕功能暂不可用</span><span class="btn primary">打开 Sunshine 页</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<h3>控件可用性矩阵</h3>
+<table>
+<tr><th>控件</th><th>locked</th><th>ready · 空闲</th><th>ready · 任务中</th></tr>
+<tr><td>获取 / 更新 / 重新获取</td><td>可用（locked 下的主操作）</td><td>可用</td><td>禁用（进度区呈现阶段）</td></tr>
+<tr><td>检查更新</td><td>可用</td><td>可用</td><td>禁用</td></tr>
+<tr><td>版本选择（segmented + 列表）</td><td>可用</td><td>可用</td><td>禁用</td></tr>
+<tr><td>菜单栏每屏开关</td><td>禁用</td><td>可用</td><td>可用（实例停止期间禁用）</td></tr>
+<tr><td>屏幕管理页「应用」/ 添加 / 卡片操作</td><td>遮罩禁用</td><td>可用</td><td>可用（换装窗口期禁用）</td></tr>
+<tr><td>权限页 / 诊断页</td><td colspan="3">始终可用（诊断页含 Sunshine 状态行）</td></tr>
+</table>
+
+<h2>S5 错误与冲突规则（概览）</h2>
+<table>
+<tr><th>情形</th><th>级别</th><th>处置</th></tr>
+<tr><td>下载失败（网络 / 404 资产缺失）</td><td>任务错误</td><td>错误态文案 + 手动重试；staging 清理</td></tr>
+<tr><td>GitHub 限流 403</td><td>任务错误</td><td>限流提示（重置剩余分钟）+ 手动重试</td></tr>
+<tr><td>验签不符 / 版本不符</td><td>硬失败</td><td>拒绝落位 + 清 staging；错误态点名原因</td></tr>
+<tr><td>所选版本 &lt; v2026.1112</td><td>警示</td><td>警示条（S8 缺陷说明），允许继续</td></tr>
+<tr><td>换装时实例停止失败</td><td>硬失败</td><td>中止换装（旧版保留就绪），错误呈现</td></tr>
+<tr><td>受管目录运行中被手动破坏</td><td>运行错误</td><td>实例异常退出 → 退避重启失败 → 看门狗对账转锁定态</td></tr>
+<tr><td>release 缺本机架构资产</td><td>不可获取</td><td>版本列表标注，不可发起下载（芯片类型规则）</td></tr>
+<tr><td>迁移提示重复出现</td><td>体验</td><td><code>sunshine.migrationDone</code> 标记一次性；提示条只随 legacy 信号出现</td></tr>
+</table>
+
+<h2>S6 枚举清单</h2>
+<table>
+<tr><th>枚举 / 取值</th><th>语义</th></tr>
+<tr><td><code>SunshineReadiness.ready</code> / <code>.locked</code></td><td>受管 Sunshine 就绪判定（唯一两态；下载等瞬态不属于 readiness）</td></tr>
+<tr><td><code>selectedVersion</code> = <code>"latest"</code> | <code>"vYYYY.MMDD.序号"</code></td><td>版本跟随策略：跟随最新 | 钉住具体 release</td></tr>
+<tr><td><code>DownloadPhase</code> = <code>fetching</code> / <code>downloading</code> / <code>extracting</code> / <code>verifying</code> / <code>swapping</code> / <code>restarting</code></td><td>Sunshine 页进度区呈现的任务阶段（任务瞬态）</td></tr>
+<tr><td>legacy 信号 = config.json <code>binaryPath</code> 键 | <code>~/.config/sunshine/</code> conf+credentials 存在</td><td>迁移提示条的触发条件（任一命中；迁移不改变就绪判定）</td></tr>
+<tr><td><code>minimumSupportedVersion</code> = <code>"v2026.1112"</code></td><td>最低支持版本常量（ManagedSunshineStore）；UI 固定说明、列表「不支持」标注与警示条共用</td></tr>
+</table>
+
+<footer>
+关联：plan 全文 <code>artifacts/managed-sunshine-design.plan.md</code> · 实测依据 <code>Plans/multi-display-spike.md</code> S8 · conf 键集现行约定 <code>AGENTS.md</code>
+</footer>
+</div>
+
+<script>
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral', fontFamily: '-apple-system, "PingFang SC", sans-serif' });
+</script>
