@@ -1,0 +1,277 @@
+<title>UI 页面信息归拢设计</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f4f5f8;
+  --fg: #1c2230;
+  --muted: #5a6472;
+  --panel: #ffffff;
+  --line: #d9dee6;
+  --accent: #3d56cc;
+  --accent-soft: #e8ecfb;
+  --warn: #946200;
+  --warn-soft: #f6ecd8;
+  --err: #b3372f;
+  --err-soft: #f7e6e4;
+  --ok: #2e7d46;
+  --ok-soft: #e3f0e8;
+  --code-bg: #eceff5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171e;
+    --fg: #e7eaf0;
+    --muted: #98a2b3;
+    --panel: #1c212b;
+    --line: #2c3442;
+    --accent: #8fa2f5;
+    --accent-soft: #232b41;
+    --warn: #d9a441;
+    --warn-soft: #2e2918;
+    --err: #e07b72;
+    --err-soft: #3a211f;
+    --ok: #6fc28f;
+    --ok-soft: #1b2e23;
+    --code-bg: #10131a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171e;
+  --fg: #e7eaf0;
+  --muted: #98a2b3;
+  --panel: #1c212b;
+  --line: #2c3442;
+  --accent: #8fa2f5;
+  --accent-soft: #232b41;
+  --warn: #d9a441;
+  --warn-soft: #2e2918;
+  --err: #e07b72;
+  --err-soft: #3a211f;
+  --ok: #6fc28f;
+  --ok-soft: #1b2e23;
+  --code-bg: #10131a;
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.75 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+}
+.wrap { max-width: 920px; margin: 0 auto; padding-block: 40px 72px; }
+h1, h2, h3 { font-family: "Noto Serif SC", serif; line-height: 1.3; }
+h1 { font-size: 30px; margin: 0 0 6px; }
+h2 { font-size: 21px; margin: 48px 0 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 26px 0 8px; }
+p { margin: 8px 0; }
+.lede { color: var(--muted); margin-bottom: 22px; }
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; }
+code { background: var(--code-bg); border-radius: 5px; padding: 1px 5px; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); font-weight: 600; white-space: nowrap; }
+ul { margin: 6px 0; padding-left: 22px; }
+li { margin: 3px 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin: 14px 0; }
+.card h4 { margin: 0 0 8px; font-size: 13.5px; font-family: "IBM Plex Mono", monospace; letter-spacing: .3px; }
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
+.badge { display: inline-block; border-radius: 5px; padding: 1px 8px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; }
+.b-ok { background: var(--ok-soft); color: var(--ok); }
+.b-warn { background: var(--warn-soft); color: var(--warn); }
+.b-err { background: var(--err-soft); color: var(--err); }
+.b-acc { background: var(--accent-soft); color: var(--accent); }
+.moved-out { color: var(--err); }
+.moved-in { color: var(--ok); }
+.new { color: var(--accent); }
+/* mockup 构件 */
+.mock { max-width: 640px; margin: 18px auto; }
+.window { background: var(--panel); border: 1px solid var(--line); border-radius: 11px; box-shadow: 0 10px 34px rgba(0,0,0,.14); overflow: hidden; }
+.win-titlebar { display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--code-bg); }
+.dot-t { width: 11px; height: 11px; border-radius: 50%; }
+.dot-t.r { background: #ff5f57; } .dot-t.y { background: #febc2e; } .dot-t.g { background: #28c840; }
+.win-title { margin: 0 auto; font-size: 12.5px; color: var(--muted); transform: translateX(-18px); }
+.tabbar { display: flex; gap: 4px; justify-content: center; padding: 9px 10px 7px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tab { font-size: 12px; color: var(--muted); border-radius: 6px; padding: 3px 12px; }
+.tab.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.win-body { padding: 14px 18px 18px; display: grid; gap: 12px; }
+.blk { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; }
+.blk-label { font-size: 11px; letter-spacing: .6px; color: var(--muted); margin-bottom: 7px; }
+.kv { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 3px 0; font-size: 13px; flex-wrap: wrap; }
+.kv .k { color: var(--muted); }
+.row { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: none; }
+.btn { display: inline-block; border-radius: 7px; padding: 4px 14px; font-size: 12.5px; border: 1px solid var(--line); color: var(--fg); background: var(--panel); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn[disabled] { opacity: .45; }
+.chip { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12.5px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.pill-ok { background: var(--ok-soft); color: var(--ok); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+.pill-off { background: var(--code-bg); color: var(--muted); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+.pill-orange { background: var(--warn-soft); color: var(--warn); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+.dot-s { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 2px; vertical-align: -1px; }
+.dot-s.green-solid { background: var(--ok); }
+.dot-s.green-ring { border: 1.5px solid var(--ok); }
+.dot-s.grey-ring { border: 1.5px solid var(--muted); }
+.dot-s.orange-solid { background: var(--warn); }
+.disclose { font-size: 12.5px; color: var(--muted); padding: 5px 0; }
+.disclose-body { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+.note-bar { border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
+.note-bar.warn { background: var(--warn-soft); color: var(--warn); }
+.note-bar.acc { background: var(--accent-soft); color: var(--accent); }
+footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+@media (max-width: 640px) { h1 { font-size: 25px; } }
+</style>
+
+<div class="wrap">
+<h1>UI 页面信息归拢设计</h1>
+<p class="lede">Retina 指引归屏幕管理页底部（公共信息）· 编码器探测归诊断 · Sunshine 页收敛为程序管理域 · 窗口置顶</p>
+
+<div class="legend" style="display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0;font-size:12.5px;color:var(--muted)">
+  <span style="color:var(--accent)">重点：界面设计（逐页目标内容与布局）</span>
+  <span>交互逻辑 / 数据结构 / 错误处理：概览级</span>
+</div>
+<p class="meta-row">
+  <span>plan：artifacts/ui-pages-design.plan.md</span>
+  <span>日期：2026-11-13</span>
+</p>
+
+<h2>S0 信息归属矩阵与组织原则</h2>
+<table>
+<tr><th>信息项</th><th>归属页</th><th>本轮变化</th></tr>
+<tr><td>Retina 指引（公共信息，不绑屏）</td><td>屏幕管理页 · 底部公共块</td><td class="moved-in">迁入（公共措辞）</td></tr>
+<tr><td>编码器探测（逐屏）</td><td>诊断页 · 按屏组</td><td class="moved-in">迁回</td></tr>
+<tr><td>外接显示器清单</td><td>—</td><td class="moved-out">移除</td></tr>
+<tr><td>Sunshine 受管副本检查</td><td>诊断页 · 公共组</td><td class="moved-in">迁入</td></tr>
+<tr><td>output_name 一致性（逐屏）</td><td>诊断页 · 按屏组</td><td class="moved-in">迁入</td></tr>
+<tr><td>Sunshine 信息区排版</td><td>Sunshine 页 · 详细信息</td><td>保持现状（首屏端口族单行）</td></tr>
+<tr><td>Sunshine 进程状态 / 获取更新 / 版本 / 托盘 / 架构</td><td>Sunshine 页</td><td>保留</td></tr>
+<tr><td>屏幕捕获 / 输入控制授权</td><td>权限页</td><td>保留</td></tr>
+<tr><td>私有 API / 虚拟屏逐屏</td><td>诊断页</td><td>保留</td></tr>
+</table>
+<p>组织原则（入 AGENTS.md）：按屏幕组织信息时以屏幕为单位分组，内部以 slotID 为键，显示用屏幕名。</p>
+
+<h2>S1 屏幕管理页</h2>
+<h3>目标内容</h3>
+<ul>
+  <li>顶部：本机 IPv4 chips + 「添加屏幕…」（accent 主按钮）+ 「状态每秒自动刷新」注记</li>
+  <li>屏幕卡×N（按 slotNumber 排序）：卡头（状态 pill + 屏名 + <span class="new">端口徽章</span> + 同步状态）→ 规格行（W×H · Hz · HiDPI + <span class="new">等效徽章</span>）→ <span class="new">「Retina 指引」可展开行</span> → 动作行（启用开关 / 重启串流 / Web UI / 配对… / 修改… / 重置或删除）</li>
+  <li>锁定态：半透明遮罩「Sunshine 未就绪，屏幕功能暂不可用」+「打开 Sunshine 页」；添加按钮与卡片禁用</li>
+</ul>
+<div class="mock">
+<div class="window">
+  <div class="win-titlebar"><i class="dot-t r"></i><i class="dot-t y"></i><i class="dot-t g"></i><span class="win-title">MoonRise 设置 — 屏幕</span></div>
+  <div class="win-body">
+    <div class="kv"><span class="k mono">192.168.200.199</span><span style="margin-left:auto"><span class="btn primary">添加屏幕…</span></span></div>
+    <div class="blk">
+      <div class="kv"><span><span class="pill-ok">● 串流中</span> <b>Moon 1</b> <span class="chip">端口 47989</span></span><span style="color:var(--muted);font-size:12px">已同步</span></div>
+      <div class="kv"><span class="mono" style="font-size:12px;color:var(--muted)">2560×1600 · 60 Hz · HiDPI</span><span class="chip">等效 1280×800</span></div>
+      <div class="kv"><span class="k">启用</span><span style="margin-left:auto"><span class="btn">重启串流</span> <span class="btn">Web UI</span> <span class="btn">配对…</span> <span class="btn">修改…</span> <span class="btn">重置（清账号与配对）</span></span></div>
+    </div>
+    <div class="blk">
+      <div class="kv"><span><span class="pill-off">○ 未启用</span> <b>Moon 2</b> <span class="chip">端口 48089</span></span><span style="color:var(--muted);font-size:12px">已同步</span></div>
+      <div class="kv"><span class="mono" style="font-size:12px;color:var(--muted)">2048×1536 · 60 Hz · HiDPI</span><span class="chip">等效 1024×768</span></div>
+      <div class="kv"><span class="k">启用</span><span style="margin-left:auto"><span class="btn">重启串流</span> <span class="btn">Web UI</span> <span class="btn">配对…</span> <span class="btn">修改…</span> <span class="btn">删除（销屏并清理）</span></span></div>
+    </div>
+  </div>
+</div>
+</div>
+    <div class="note-bar acc" style="margin-top:12px">
+      <div style="font-weight:600;margin-bottom:4px">Retina 指引（公共信息）</div>
+      <div>Retina 清晰度取决于两项设置：</div>
+      <div>① 系统设置 → 显示器：选中 Moon 屏，分辨率选择逻辑分辨率（"看起来像" = 像素尺寸的一半）</div>
+      <div>② Moon 端 Moonlight：分辨率设为与该屏像素尺寸一致、全屏显示</div>
+    </div>
+
+<h2>S2 Sunshine 页</h2>
+<h3>目标内容（程序管理域收敛后）</h3>
+<ul>
+  <li>状态区：就绪/未获取 + 版本徽标；进程行（每秒心跳 + 重启按钮）</li>
+  <li>版本区：最低支持版本说明 + 选择器（跟随最新 / 近 20 条，缺架构资产禁选、低于最低版本标不支持）+ 更新 / 重新获取 / 检查更新</li>
+  <li>信息区（可展开）：排版保持现状（受管 bundle / 可执行 / 主 conf / 首屏端口族 / 主实例日志 / 架构 / 托盘，逐行可复制）</li>
+  <li>健康检查区（5s 刷新）：受管副本 + output_name 逐屏一致性（编码器探测已移出）</li>
+  <li>进度区（任务中）+ 消息行 + 警示条（低于最低支持版本）+ 迁移提示条</li>
+</ul>
+<div class="mock">
+<div class="window">
+  <div class="win-titlebar"><i class="dot-t r"></i><i class="dot-t y"></i><i class="dot-t g"></i><span class="win-title">MoonRise 设置 — Sunshine</span></div>
+  <div class="win-body">
+    <div class="blk">
+      <div class="blk-label">状态</div>
+      <div class="kv"><span class="k">受管 Sunshine</span><span><span class="badge b-ok">就绪</span> <span class="badge b-acc">v2026.1112.40957</span></span></div>
+      <div class="kv"><span class="k">进程</span><span>运行中 pid=46827 <span class="btn">重启</span></span></div>
+    </div>
+    <div class="blk">
+      <div class="blk-label">版本 · 支持的最低版本 v2026.1112</div>
+      <div class="kv"><span class="k">版本选择</span><span class="mono">跟随最新</span></div>
+      <div class="kv"><span class="k">最新版本</span><span>v2026.1112.40957（11-12 发布）</span></div>
+      <div class="kv"><span class="k">　</span><span><span class="btn primary">更新</span> <span class="btn">检查更新</span> <span class="btn">重新获取</span></span></div>
+    </div>
+    <div class="blk">
+      <div class="blk-label">Sunshine 信息 · 详细信息</div>
+      <div class="kv"><span class="k">受管 bundle</span><span class="mono">~/.config/moonrise/sunshine/Sunshine.app</span><span>⧉</span></div>
+      <div class="kv"><span class="k">可执行文件</span><span class="mono">…/Sunshine.app/Contents/MacOS/sunshine</span><span>⧉</span></div>
+      <div class="kv"><span class="k">主 conf</span><span class="mono">~/.config/sunshine/sunshine.conf</span><span>⧉</span></div>
+      <div class="kv"><span class="k">本机架构</span><span class="mono">arm64</span><span>⧉</span></div>
+      <div class="kv"><span class="k">托盘</span><span class="mono">system_tray = disabled</span><span>⧉</span></div>
+      <div class="kv"><span class="k">首屏端口族</span><span class="mono">47989（配对）· 47990（Web UI）· 48010（RTSP）</span><span>⧉</span></div>
+    </div>
+  </div>
+</div>
+</div>
+<p style="color:var(--muted);font-size:12.5px">健康检查已整合至诊断页；本页仅保留 Sunshine 程序管理域（状态/版本/受管与首屏信息/获取更新）。锁定态时本页功能不变（获取即本页主操作）。</p>
+
+<h2>S3 诊断页（调整后）</h2>
+<div class="mock">
+<div class="window">
+  <div class="win-titlebar"><i class="dot-t r"></i><i class="dot-t y"></i><i class="dot-t g"></i><span class="win-title">MoonRise 设置 — 诊断</span></div>
+  <div class="win-body">
+    <div class="blk">
+      <div class="kv"><span class="k"><span class="dot-s green-solid"></span>虚拟屏私有 API</span><span style="color:var(--muted);font-size:12px">公共项 · macOS 私有类与 selector 全部在位</span></div>
+      <div class="kv"><span class="k"><span class="dot-s green-solid"></span>屏幕捕获权限（MoonRise）</span><span style="color:var(--muted);font-size:12px">公共项 · 已授予（全部实例共用该归属）</span></div>
+      <div class="kv"><span class="k"><span class="dot-s green-solid"></span>Sunshine 受管副本</span><span style="color:var(--muted);font-size:12px">公共项 · 就绪 · ~/.config/moonrise/sunshine/Sunshine.app</span></div>
+      <div class="kv" style="color:var(--accent);font-weight:600"><span>Moon 1</span><span style="font-weight:400;color:var(--muted)">按屏组（键 = slotID）</span></div>
+      <div class="kv"><span class="k"><span class="dot-s green-solid"></span>虚拟屏</span><span style="color:var(--muted);font-size:12px">id=128 · 2560×1600@60（活动列表中）</span></div>
+      <div class="kv"><span class="k"><span class="dot-s green-solid"></span>output_name 一致性</span><span style="color:var(--muted);font-size:12px">sunshine.conf → 128</span></div>
+      <div class="kv"><span class="k"><span class="dot-s green-solid"></span>编码器探测</span><span style="color:var(--muted);font-size:12px">捕获权限正常，VideoToolbox 硬件编码器就绪</span></div>
+      <div class="kv" style="color:var(--accent);font-weight:600"><span>Moon 2（未启用）</span><span style="font-weight:400;color:var(--muted)">停用屏不产生检查行</span></div>
+    </div>
+    <div class="kv" style="justify-content:center"><span class="btn">重新检查</span></div>
+  </div>
+</div>
+</div>
+<p style="color:var(--muted);font-size:12.5px">组织：先公共组（私有 API / 捕获权限 / Sunshine 受管副本），后按屏组（每屏三行：虚拟屏 / output_name 一致性 / 编码器探测）。Retina 指引与外接显示器清单不再出现。</p>
+
+<h2>S4 权限页 / 通用页 / 菜单面板（不变，对照）</h2>
+<ul>
+  <li>权限页：屏幕捕获行 + 输入控制行 + 指引（授权对象 MoonRise、两步操作、完成后自动变绿）。</li>
+  <li>通用页：保持显示器缩放 / 禁用音频串流 / 开机自启 / 重启全部实例 / 重新同步 + 登录项失败 .alert。</li>
+  <li>菜单面板：状态行（locked 引导 / running 聚合 / degraded 错误）+ 每屏整行切换（四态彩圆）+ 内联错误 + 设置…（SettingsLink）+ 退出 ⌘Q。</li>
+</ul>
+
+<h2>S5 添加 / 修改 / 配对窗口（不变，对照）</h2>
+<ul>
+  <li>添加屏幕：预设选择（MacBook / iPad / 通用 / 自定义）+ 名称 / 尺寸 / 刷新率 / HiDPI + 「添加」（就地报错）+ 标题栏关闭。</li>
+  <li>修改屏幕：同表单编辑态 + 「修改」（就地报错）。</li>
+  <li>配对：准备中 → fallback（Web UI 按钮）/ primaryGuide / running（设备列表 + 成功态）；凭据复制。</li>
+</ul>
+
+<h2>S6 窗口置顶</h2>
+<p>设置窗口与 添加/修改/配对 子窗口弹出时，经 occlusion 登记处 <code>orderFrontRegardless()</code> 强制置前（设置窗追加 <code>makeKeyAndOrderFront</code>）——绕过附件态转正的激活时序，保证在其它 app 窗口之前显示。居中与定尺寸逻辑不变；面板/锁定引导打开路径经 coordinator 自动获得同等行为。</p>
+<div class="mock">
+<div class="window" style="position:relative;min-height:120px">
+  <div class="win-titlebar"><i class="dot-t r"></i><i class="dot-t y"></i><i class="dot-t g"></i><span class="win-title">其它 app 窗口（前台）</span></div>
+  <div class="win-body"><div style="color:var(--muted);font-size:12.5px">点击菜单面板「设置…」…</div></div>
+  <div style="position:absolute;right:18px;bottom:14px;width:62%;border-radius:10px;border:2px solid var(--accent);background:var(--panel);box-shadow:0 14px 40px rgba(0,0,0,.3);overflow:hidden">
+    <div class="win-titlebar" style="padding:6px 12px"><span class="win-title" style="transform:none;margin:0 auto;color:var(--accent);font-weight:600">MoonRise 设置（置顶层）</span></div>
+    <div style="padding:10px 14px;font-size:12px;color:var(--muted)">orderFrontRegardless → 显示在最上面</div>
+  </div>
+</div>
+</div>
+
+<footer>
+关联：plan <code>artifacts/ui-pages-design.plan.md</code> · 前序设计 <code>artifacts/managed-sunshine-design.html</code> · 信息归属原则见 AGENTS.md（本轮追加）
+</footer>
+</div>

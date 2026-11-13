@@ -1,6 +1,6 @@
 MoonRise:
     ✔ 菜单栏 NSStatusItem/NSMenu 迁移 MenuBarExtra（SwiftUI 全量收尾）@done(2026-11-13 14:30)
-        决策 采用 .window 玻璃面板形态：三项前置条件（FB #477 动态重渲染 / 彩色圆点 / ⌘Q 与错误弹框等价）全部自然规避——面板 SwiftUI 自绘彩色圆点、退出按钮带 ⌘Q、失败信息内联面板
+        决策 先以 .window 玻璃面板过渡，最终定型 .menu 标准菜单样式（用户选择）：三项前置条件实测对齐——动态重渲染（菜单每次打开重新求值，等价旧 NSMenuDelegate 全量重建）；彩色圆点（Label icon 用 NSImage 彩色小圆点，isTemplate=false，旧 NSMenu 同款渲染）；⌘Q（菜单项 keyboardShortcut）与错误弹框等价（切换失败恢复 NSAlert）
     ✔ 提交推送 logo 定稿资产与全部改动 @done(2026-11-07 02:22)
     ☐ 可选: IconComposer 导出 MoonRise.icon 装入 bundle（消除 Quick Look 白圈，系统级）
     ☐ 多屏鼠标定位错误（打开另一屏 / 调整排列后 Moon 中光标偏移）

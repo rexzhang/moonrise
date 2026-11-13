@@ -100,14 +100,11 @@ final class SettingsModel: ObservableObject {
     @Published var errors: [UUID: String] = [:]
     var callbacks = ScreenCallbacks()
     /// 诊断页数据源：主线程快照 → 后台检查 → 主线程回调（AppController 提供）。
-    var diagnosticsProvider: ((@escaping ([DiagnosticsModel.CheckRow]) -> Void) -> Void)?
+    var diagnosticsProvider: ((@escaping ([DiagnosticsModel.CheckSection]) -> Void) -> Void)?
     /// 权限页数据源（AppController 提供，主线程采集）。
     var permissionProvider: (() -> PermissionStatusSnapshot?)?
     /// Sunshine 页进程状态源（AppController 提供，页面每秒拉取）。
     var sunshineProcessProvider: (() -> String)?
-    /// Sunshine 页健康检查源（受管副本 + output_name 逐屏一致性；页面定时拉取）。
-    var sunshineHealthProvider: (() -> [DiagnosticsModel.CheckRow])?
-    @Published var sunshineHealthRows: [DiagnosticsModel.CheckRow] = []
     /// 当前页实测内容高度（页面直报；preference 不穿透 TabView，根视图据此定窗口高）。
     @Published var pageContentHeight: CGFloat = 0
     /// 主实例 Web UI 凭据副本路径（配对窗口首屏接管用；AppController 按当前 configPath 注入）。
@@ -185,6 +182,8 @@ final class SettingsCoordinator {
     private var heightCancellables: Set<AnyCancellable> = []
     /// 待直达页：场景窗口有 tab 记忆恢复，页赋值须等窗口出现后（恢复之后）才生效。
     private var pendingPage: SettingsPage?
+    /// 置顶恢复任务（层级提升后的定时恢复 + 延迟重申，可取消）。
+    private var frontRestoreItems: [DispatchWorkItem] = []
     /// 设置窗口出现（登记）时的钩子：AppController 在此刷新回调接线与页面数据
     /// （SettingsLink 直接开窗不经过 showSettings，模型刷新挂此钩子）。
     var onSettingsShown: (() -> Void)?
@@ -210,6 +209,7 @@ final class SettingsCoordinator {
                 centerOnMainScreen(window)
                 self.syncSettingsWindowSize()
                 self.onSettingsShown?()
+                raiseToFront(window)
                 if let page = self.pendingPage {
                     self.pendingPage = nil
                     self.model.page = page
@@ -223,6 +223,9 @@ final class SettingsCoordinator {
             if window.identifier?.rawValue.hasPrefix("moonrise.") != true {
                 window.identifier = NSUserInterfaceItemIdentifier("moonrise.scene")
                 centerOnMainScreen(window)
+                // 子窗前置时设置窗回常态层级，避免浮层压住子窗
+                settingsWindow?.level = .normal
+                raiseToFront(window)
             }
         })
         // 项目 UI 标准：窗口尺寸变化（内容驱动）后自动居中（用户改宽的设置窗口不干预）。
@@ -234,6 +237,14 @@ final class SettingsCoordinator {
                   window.isVisible else { return }
             if window === self?.settingsWindow, abs(window.frame.width - 780) > 1 { return }
             centerOnMainScreen(window)
+        })
+        // 设置窗成为 key 后立即恢复常态层级（置顶提升的提前收尾）
+        observers.append(NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let window = note.object as? NSWindow,
+                  window === self?.settingsWindow else { return }
+            window.level = .normal
         })
         // 最后一个 MoonRise 窗口关闭 → 回到纯菜单栏形态（.accessory）。
         observers.append(NotificationCenter.default.addObserver(
@@ -251,14 +262,39 @@ final class SettingsCoordinator {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
-    func showSettings(page: SettingsPage? = nil) {
+    /// 打开即置顶：转正激活 + 强制置前 + 短暂提升层级（对冲场景装配期的系统重排）；
+    /// 设置窗成为 key 或超时后恢复常态层级。
+    private func raiseToFront(_ window: NSWindow) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
+        window.level = .floating
+        frontRestoreItems.forEach { $0.cancel() }
+        frontRestoreItems.removeAll()
+        for delay in [0.15, 0.45] {
+            let item = DispatchWorkItem { [weak window] in
+                guard let window, window.isVisible else { return }
+                NSApp.activate(ignoringOtherApps: true)
+                window.orderFrontRegardless()
+            }
+            frontRestoreItems.append(item)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+        }
+        let restore = DispatchWorkItem { [weak window] in
+            window?.level = .normal
+        }
+        frontRestoreItems.append(restore)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: restore)
+    }
+
+    func showSettings(page: SettingsPage? = nil) {
+        NSApp.setActivationPolicy(.regular)
         if let settingsWindow, settingsWindow.isVisible {
             if let page {
                 model.page = page
             }
-            settingsWindow.makeKeyAndOrderFront(nil)
+            raiseToFront(settingsWindow)
             return
         }
         pendingPage = page
@@ -552,7 +588,6 @@ struct SunshinePageView: View {
     /// 版本列表是否已加载（展开选择时拉取一次）
     @State private var releasesLoaded = false
     @State private var processStatus = ""
-    @State private var healthHeartbeat = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
     private let processHeartbeat = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -567,7 +602,6 @@ struct SunshinePageView: View {
             statusSection
             versionSection
             sunshineInfoSection
-            healthSection
             if model.acquirePhase != nil {
                 progressSection
             }
@@ -597,25 +631,11 @@ struct SunshinePageView: View {
         .onReceive(processHeartbeat) { _ in
             refreshDynamic()
         }
-        .onReceive(healthHeartbeat) { _ in
-            refreshHealth()
-        }
     }
 
-    /// 进程状态每秒拉取（轻量）；健康检查每 5 秒拉取——内含日志文件读，
-    /// 必须在后台队列执行（主线程同步读大日志 = 界面全面卡死），结果回主线程。
+    /// 进程状态每秒拉取（轻量、主线程安全）。
     private func refreshDynamic() {
         processStatus = model.sunshineProcessProvider?() ?? ""
-    }
-
-    private func refreshHealth() {
-        guard let provider = model.sunshineHealthProvider else { return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            let rows = provider()
-            DispatchQueue.main.async {
-                model.sunshineHealthRows = rows
-            }
-        }
     }
 
     private var statusSection: some View {
@@ -641,30 +661,9 @@ struct SunshinePageView: View {
         }
     }
 
-    private var healthSection: some View {
-        SettingsGroupBox(title: "健康检查") {
-            if model.sunshineHealthRows.isEmpty {
-                Text("暂无检查结果")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(model.sunshineHealthRows.indices, id: \.self) { index in
-                        RichRow(symbol: model.sunshineHealthRows[index].symbol,
-                                title: model.sunshineHealthRows[index].title,
-                                detail: model.sunshineHealthRows[index].detail) {
-                            Text(model.sunshineHealthRows[index].status.badge).font(.caption)
-                        }
-                        if index < model.sunshineHealthRows.count - 1 {
-                            Divider()
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // MARK: Sunshine 信息（本地安装相关，逐行可复制）
+
+    @State private var infoExpanded = false
 
     private var versionSection: some View {
         SettingsGroupBox(title: "版本 · 支持的最低版本 \(ManagedSunshineStore.minimumSupportedVersion)") {
@@ -721,10 +720,6 @@ struct SunshinePageView: View {
         }
     }
 
-    // MARK: Sunshine 信息（本地安装相关，逐行可复制）
-
-    @State private var infoExpanded = false
-
     private var sunshineInfoSection: some View {
         SettingsGroupBox(title: "Sunshine 信息") {
             DisclosureGroup("详细信息", isExpanded: $infoExpanded) {
@@ -732,10 +727,25 @@ struct SunshinePageView: View {
                     infoRow("受管 bundle", Paths.managedSunshineBundleURL.path)
                     infoRow("可执行文件", Paths.managedSunshineExecutableURL.path)
                     infoRow("主 conf", model.sunshineConfigPath)
-                    infoRow("首屏端口族", "47989（配对）· 47990（Web UI）· 48010（RTSP）")
                     infoRow("主实例日志", Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path)
                     infoRow("本机架构", ManagedSunshineStore.archAssetName)
                     infoRow("托盘", "system_tray = disabled（已抑制）")
+                    ForEach(model.summaries.sorted { $0.slotNumber < $1.slotNumber }) { summary in
+                        Text(summary.name)
+                            .font(.callout).fontWeight(.semibold)
+                            .foregroundColor(.accentColor)
+                            .padding(.top, 6)
+                        infoRow("conf", summary.port == nil
+                            ? model.sunshineConfigPath
+                            : InstanceConf.confURL(for: summary.slotID).path)
+                        infoRow("日志", summary.port == nil
+                            ? Paths.stateDirectory.appendingPathComponent("sunshine-child.log").path
+                            : InstanceConf.logURL(for: summary.slotID).path)
+                        infoRow("端口族", summary.port == nil
+                            ? "47989（配对）· 47990（Web UI）· 48010（RTSP）"
+                            : "\(summary.port!)（配对）· \(summary.port! + 1)（Web UI）· \(summary.port! + 21)（RTSP）")
+                        infoRow("output_name", summary.displayID.map(String.init) ?? "（无）")
+                    }
                 }
                 .padding(.vertical, 6)
             }
@@ -819,16 +829,16 @@ struct ScreensPageView: View {
         VStack(alignment: .leading, spacing: 12) {
             ipSection
             HStack {
+                Text("状态每秒自动刷新")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
                 Button("添加屏幕…") {
                     Log.info("添加屏幕：openWindow(moonrise.add) 调用")
                     openWindow(id: "moonrise.add")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!model.sunshineReady)
-                Spacer()
-                Text("状态每秒自动刷新")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
             let sorted = model.displays.sorted { $0.slotNumber < $1.slotNumber }
             if sorted.isEmpty {
@@ -843,6 +853,18 @@ struct ScreensPageView: View {
                     openWindow: openWindow)
                     .disabled(!model.sunshineReady)
             }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Retina 指引（公共信息）")
+                    .font(.callout.weight(.semibold))
+                Text("Retina 清晰度取决于两项设置：")
+                Text("① 系统设置 → 显示器：选中 Moon 屏，分辨率选择逻辑分辨率（“看起来像” = 像素尺寸的一半）")
+                Text("② Moon 端 Moonlight：分辨率设为与该屏像素尺寸一致、全屏显示")
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.08)))
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -852,7 +874,7 @@ struct ScreensPageView: View {
 
     /// 公共信息：本机全部有效 IPv4（多屏共用，只展示）。
     private var ipSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 10) {
             Text("本机 IP 地址 · 多屏共用")
                 .font(.subheadline).fontWeight(.semibold)
                 .foregroundColor(.secondary)
@@ -1015,7 +1037,7 @@ private struct ScreenCard: View {
 struct DiagnosticsPageView: View {
     @ObservedObject var model: SettingsModel
     @State private var loading = true
-    @State private var rows: [DiagnosticsModel.CheckRow] = []
+    @State private var sections: [DiagnosticsModel.CheckSection] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1028,20 +1050,33 @@ struct DiagnosticsPageView: View {
                 .padding(.vertical, 40)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(rows.indices, id: \.self) { index in
-                        RichRow(symbol: rows[index].symbol,
-                                title: rows[index].title,
-                                detail: rows[index].detail) {
-                            Text(rows[index].status.badge).font(.caption)
+                    ForEach(sections) { section in
+                        Text(section.header ?? "公共检查")
+                            .font(.subheadline).fontWeight(.semibold)
+                            .foregroundColor(.accentColor)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 8)
+                            .background(Color.accentColor.opacity(0.06))
+                        ForEach(section.rows.indices, id: \.self) { index in
+                            RichRow(symbol: section.rows[index].symbol,
+                                    title: section.rows[index].title,
+                                    detail: section.rows[index].detail) {
+                                Text(section.rows[index].status.badge).font(.caption)
+                            }
+                            if index < section.rows.count - 1 {
+                                Divider()
+                            }
                         }
-                        if index < rows.count - 1 {
-                            Divider()
-                        }
+                        Divider()
                     }
                 }
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.08)))
-                Button("重新检查") { reload() }
+                HStack {
+                    Spacer()
+                    Button("重新检查") { reload() }
+                    Spacer()
+                }
             }
         }
         .padding(16)
@@ -1056,7 +1091,7 @@ struct DiagnosticsPageView: View {
         guard let provider = model.diagnosticsProvider else { return }
         loading = true
         provider { result in
-            rows = result
+            sections = result
             loading = false
         }
     }
@@ -1098,10 +1133,14 @@ struct PermissionPageView: View {
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.08)))
 
-            Text(guidance)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(guidanceLines, id: \.self) { line in
+                    Text(line)
+                }
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1117,18 +1156,18 @@ struct PermissionPageView: View {
         }
     }
 
-    private var guidance: String {
+    private var guidanceLines: [String] {
         if !snapshot.captureGranted || !snapshot.inputGranted {
-            var steps = "权限对象是 MoonRise（Sunshine 以子进程运行，macOS 按责任进程向 MoonRise 收权限；给 sunshine 二进制授权无效）。"
+            var lines = ["权限对象是 MoonRise（Sunshine 以子进程运行，macOS 按责任进程向 MoonRise 收权限；给 sunshine 二进制授权无效）。"]
             if !snapshot.captureGranted {
-                steps += " ① 屏幕捕获：点「请求屏幕捕获授权」→ 弹窗点「允许」。"
+                lines.append("① 屏幕捕获：点「请求屏幕捕获授权」→ 弹窗点「允许」。")
             }
             if !snapshot.inputGranted {
-                steps += " ② 输入控制：点「请求输入控制授权」→ 系统设置中打开 MoonRise 开关（Moon 端键鼠控制需要）。"
+                lines.append("② 输入控制：点「请求输入控制授权」→ 系统设置中打开 MoonRise 开关（Moon 端键鼠控制需要）。")
             }
-            steps += " 完成后本页数秒内自动变绿，Sunshine 会自动重启。"
-            return steps
+            lines.append("完成后本页数秒内自动变绿，Sunshine 会自动重启。")
+            return lines
         }
-        return "权限就绪 ✓。Sunshine 进程与编码器探测状态见「Sunshine」页。"
+        return ["权限就绪 ✓。Sunshine 进程与编码器探测状态见「Sunshine」页。"]
     }
 }

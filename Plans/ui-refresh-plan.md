@@ -123,3 +123,18 @@ R1 先行；R2 / R3 / R4 依赖 R1；R5 / R6 依赖 R1（窗口承载）；R7 �
 - AppController 瘦身为生命周期壳 + 纯编排：面板状态收敛到 PanelModel 单例（ObservableObject，AppController 经 syncPanel 主线程推送快照）；NSStatusItem/NSMenu/NSMenuDelegate/NSAlert/@objc 动作全删；登录项失败改设置通用页 .alert；菜单切换失败改面板内联错误。
 - off-main AppKit 崩溃根因（NSStatusItem 重绘 delayed perform 落在 realize 泵的后台 run loop → CoreAutoLayout 断言 abort）随 NSMenu 移除整体消除；AGENTS.md 已将"非主线程 AppKit 禁令"硬约束化。
 - SettingsLink 直接开窗不经过 showSettings：设置窗口出现钩子 onSettingsShown 承接回调接线与模型刷新（SettingsCoordinator）。
+
+## 追加实施：逐页信息归拢 + 窗口置顶 + UI 排版约定（2026-11-13）
+
+- 诊断页重排：先公共组（私有 API / 捕获权限 / Sunshine 受管副本），后按屏组（虚拟屏 / output_name 一致性 / 编码器探测，组头 = 屏幕名、键 = slotID）；runChecks 输出改 CheckSection 分段结构；Retina 指引与外接显示器清单移出诊断页。
+- Retina 指引 → 屏幕管理页底部公共信息块（措辞不绑定具体屏幕，多条目换行排版）；屏幕卡不再有 Retina 展开行。
+- Sunshine 页健康检查区移除（受管副本行与 output_name 一致性并入诊断页按屏组）；信息区排版保持现状（受管 bundle / 可执行 / 主 conf / 首屏端口族 / 主实例日志 / 架构 / 托盘，逐行可复制）。
+- 窗口置顶：occlusion 登记处对设置窗与 moonrise.scene 子窗 orderFrontRegardless（设置窗追加 makeKeyAndOrderFront）——修复附件态转正时序导致的"窗口被其它 app 压住"。
+- UI 排版约定（入 AGENTS.md）：多条目叙述文本换行排版；按钮居中或靠右；弹出窗口一律主显示器居中置顶；按屏组织原则（slotID 键控、显示屏名）。
+- 权限页指引改逐行渲染；屏幕管理添加按钮与屏幕卡动作行右对齐；诊断"重新检查"居中；菜单面板操作行靠右。
+
+## 追加实施：菜单栏面板改标准菜单样式（2026-11-13）
+
+- MenuBarExtra 由 .window 玻璃面板改 .menuBarExtraStyle(.menu) 标准菜单（用户选择原生菜单形态）；MenuBarPanelView 删除，PanelModel 单例保留（MoonRiseApp 内，.menu 内容与 label 图标的数据源）。
+- .menu 三项前置条件实测对齐：动态重渲染 = 菜单每次打开重新求值（等价旧 NSMenuDelegate 全量重建）；彩色圆点 = 菜单项 Label icon 用 BrandGlyph.dot NSImage（isTemplate=false 彩色渲染，旧 NSMenu 同款）；⌘Q = 菜单项 keyboardShortcut，错误弹框等价 = 切换失败恢复 NSAlert（主线程）。
+- 菜单项结构：状态项（locked 引导直达 Sunshine 页 / running 聚合 / degraded 错误）+ 每屏项（整项点击切换启用）+ 设置…（SettingsLink）+ 退出 ⌘Q。

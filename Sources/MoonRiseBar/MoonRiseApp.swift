@@ -1,9 +1,19 @@
-// MoonRiseApp.swift — @main SwiftUI 入口：Settings 场景（设置窗口）+ WindowGroup / Window
-// 场景（修改 / 配对 / 添加子窗口，按值定位窗口，同屏重复打开自动聚焦既有窗口）。
-// 菜单栏 NSStatusItem 仍由 AppController 承载（AGENTS.md 允许的例外）。
+// MoonRiseApp.swift — @main SwiftUI 入口：MenuBarExtra(.menu) 标准菜单（菜单栏）+
+// Settings 场景（设置窗口）+ WindowGroup / Window 场景（修改 / 配对 / 添加子窗口）。
 
 import SwiftUI
+import AppKit
 import MoonRiseCore
+
+/// 菜单面板可观察状态：AppController 经 syncPanel 主线程推送（真源在 AppController）。
+final class PanelModel: ObservableObject {
+    static let shared = PanelModel()
+    @Published var phase: AppController.Phase = .starting
+    @Published var summaries: [AppController.ScreenSummary] = []
+    @Published var busy = false
+
+    private init() {}
+}
 
 @main
 struct MoonRiseApp: App {
@@ -12,7 +22,7 @@ struct MoonRiseApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarPanelView(model: panel, controller: appDelegate)
+            menuContent
         } label: {
             switch panel.phase {
             case .starting, .running:
@@ -21,7 +31,7 @@ struct MoonRiseApp: App {
                 Image(nsImage: BrandGlyph.problem())
             }
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
 
         Settings {
             SettingsRootView(model: SettingsCoordinator.shared.model)
@@ -42,6 +52,52 @@ struct MoonRiseApp: App {
         }
         .windowResizability(.contentSize)
     }
+
+    // MARK: - 菜单项（标准菜单）
+
+    @ViewBuilder
+    private var menuContent: some View {
+        switch panel.phase {
+        case .starting:
+            Text("启动中…")
+        case .locked:
+            Button("Sunshine 未就绪 — 点击设置") {
+                SettingsCoordinator.shared.showSettings(page: .sunshine)
+            }
+        case .running:
+            Text(aggregateText)
+        case .degraded(let message):
+            Text("错误：\(message)")
+        }
+        Divider()
+        ForEach(panel.summaries) { summary in
+            Button {
+                appDelegate.toggleScreen(slotID: summary.slotID)
+            } label: {
+                Label(title: { Text("\(summary.name) · \(summary.state.label)") },
+                      icon: { Image(nsImage: BrandGlyph.dot(for: summary.state)) })
+            }
+            .disabled(panel.busy || panel.phase == .locked)
+        }
+        Divider()
+        SettingsLink {
+            Label("设置…", systemImage: "gearshape")
+        }
+        Divider()
+        Button("退出") {
+            NSApp.terminate(nil)
+        }
+        .keyboardShortcut("q", modifiers: .command)
+    }
+
+    private var aggregateText: String {
+        let summaries = panel.summaries
+        let enabledCount = summaries.filter(\.enabled).count
+        let streamingCount = summaries.filter { $0.state == .streaming }.count
+        let instancesTotal = summaries.filter { $0.enabled }.count
+        let instancesRunning = summaries.filter { $0.enabled && $0.instanceStatus != "未运行" }.count
+        return "\(enabledCount) 屏 · 串流 \(streamingCount) · 实例 \(instancesRunning)/\(instancesTotal)"
+    }
 }
 
 // MARK: - 修改窗口（按屏）
@@ -58,7 +114,7 @@ struct EditWindowRootView: View {
                 streaming: model.summary(for: display.id)?.state == .streaming,
                 others: model.displays.filter { $0.id != display.id },
                 onApply: { candidate, reportError in
-                    // applySlotEdit 的结果回调在 runBusy 后台线程触发——切回主线程再碰视图状态
+                    // applyEdit 的结果回调在 runBusy 后台线程触发——切回主线程再碰视图状态
                     model.callbacks.applyEdit?(candidate) { errorMessage in
                         DispatchQueue.main.async {
                             if let errorMessage {
@@ -143,6 +199,5 @@ struct AddWindowRootView: View {
             },
             onClose: { dismiss() })
             .navigationTitle("添加屏幕")
-            .onAppear { Log.info("添加屏幕窗口已出现") }
     }
 }

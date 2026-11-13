@@ -48,7 +48,6 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var watchdog: Timer?
     private var lastCapturePermission: Bool?
     private var restartedSunshineAfterGrant = false
-    private var lastPanelError: String?
 
     // MARK: - 生命周期
 
@@ -263,16 +262,16 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 面板内联错误（5s 自动清除）。
+    /// 菜单整行切换失败的错误弹框（标准菜单无内联呈现，恢复旧款 NSAlert）。
     private func setPanelError(_ message: String) {
-        lastPanelError = message
         DispatchQueue.main.async {
-            PanelModel.shared.panelError = message
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                if PanelModel.shared.panelError == message {
-                    PanelModel.shared.panelError = nil
-                }
-            }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "切换屏幕失败"
+            alert.informativeText = message
+            alert.addButton(withTitle: "好")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
         }
     }
 
@@ -433,7 +432,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     /// 诊断页数据源：主线程快照 → 后台跑检查 → 主线程回调（设置窗口「切入即检查」）。
-    private func runDiagnostics(completion: @escaping ([DiagnosticsModel.CheckRow]) -> Void) {
+    private func runDiagnostics(completion: @escaping ([DiagnosticsModel.CheckSection]) -> Void) {
         let context = DiagnosticsModel.Context(
             screens: screenSummaries().map { summary in
                 DiagnosticsModel.ScreenDiagnostics(
@@ -447,8 +446,8 @@ final class AppController: NSObject, NSApplicationDelegate {
                     syncStatus: summary.syncStatus)
             })
         DispatchQueue.global(qos: .userInitiated).async {
-            let rows = DiagnosticsModel.runChecks(context: context)
-            DispatchQueue.main.async { completion(rows) }
+            let sections = DiagnosticsModel.runChecks(context: context)
+            DispatchQueue.main.async { completion(sections) }
         }
     }
 
@@ -578,21 +577,6 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         model.sunshineProcessProvider = { [weak self] in
             self?.sunshineManager.statusLine() ?? "未运行"
-        }
-        model.sunshineHealthProvider = { [weak self] in
-            guard let self else { return [] }
-            let screens = self.screenSummaries().map { summary in
-                DiagnosticsModel.ScreenDiagnostics(
-                    name: summary.name,
-                    slotID: summary.slotID,
-                    displayID: summary.displayID,
-                    isLive: summary.displayID.map { self.liveIDs().contains($0) } ?? false,
-                    spec: summary.spec,
-                    port: summary.port,
-                    enabled: summary.enabled,
-                    syncStatus: summary.syncStatus)
-            }
-            return DiagnosticsModel.sunshineChecks(screens: screens)
         }
         model.permissionProvider = { [weak self] in
             guard let self else { return nil }

@@ -139,6 +139,7 @@ struct PairingView: View {
                         openURL(url)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
             case .primaryGuide:
                 Text("\(screenName) 使用你自设的 Web UI 凭据，配对请到 Web UI 完成：")
                     .font(.callout)
@@ -150,6 +151,7 @@ struct PairingView: View {
                         openURL(url)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
             case .running:
                 if model.pairedDone {
                     // 成功态只显示结果行，不再展示等待/待配对区域

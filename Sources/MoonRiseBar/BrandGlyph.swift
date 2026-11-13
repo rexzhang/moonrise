@@ -1,4 +1,5 @@
 import AppKit
+import MoonRiseCore
 
 /// 菜单栏品牌字形：双屏叠放剪影（前屏左下在前、后屏右上在后）。
 /// 模板图标——系统自动按菜单栏深/浅模式反色。
@@ -58,5 +59,35 @@ enum BrandGlyph {
 
     private static func roundedRect(_ rect: CGRect, radius: CGFloat) -> CGPath {
         CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+    }
+}
+
+extension BrandGlyph {
+    /// 菜单项圆点图标（四态彩色；isTemplate 关闭保持颜色——旧 NSMenu 同款渲染）。
+    static func dot(for state: ScreenState) -> NSImage {
+        let image = NSImage(size: NSSize(width: 9, height: 9), flipped: false) { _ in
+            NSGraphicsContext.current?.cgContext
+            let color: NSColor
+            let filled: Bool
+            switch state {
+            case .streaming: color = .systemGreen; filled = true
+            case .idle: color = .systemGreen; filled = false
+            case .disabled: color = .secondaryLabelColor; filled = false
+            case .offline: color = .systemOrange; filled = true
+            }
+            let rect = NSRect(x: 1, y: 1, width: 7, height: 7)
+            let path = NSBezierPath(roundedRect: rect, xRadius: 3.5, yRadius: 3.5)
+            if filled {
+                color.setFill()
+                path.fill()
+            } else {
+                color.setStroke()
+                path.lineWidth = 1.5
+                path.stroke()
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 }
