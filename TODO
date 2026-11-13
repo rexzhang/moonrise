@@ -28,7 +28,7 @@ Logo 资产文件:
 
 长期观察（无需行动）:
     macOS 大版本升级 @note 私有 API 回归检查，诊断窗口点名缺失项
-    Sunshine 升级 @note brew unpin → upgrade → 菜单重启 Sunshine → brew pin
+    Sunshine 升级 @note 设置 → Sunshine 页「检查更新」比对最新版，「获取/更新」完成换装
 
 多屏妥协复查（上游/环境限制所致，定期检查调整）:
     ☐ 独立实例架构复查（每实例独立二进制副本 ~17MB × N）

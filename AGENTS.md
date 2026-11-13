@@ -1,6 +1,6 @@
 # AGENTS.md
 
-给 AI 编码代理的项目规则。人看的文档：README.md（快速开始）与 docs/（安装使用 install、架构 architecture、排障 troubleshooting、开发 development）。
+给 AI 编码代理的项目规则。人看的文档：README.md（快速开始）与 docs/（安装使用 install、排障 troubleshooting、开发 development——含架构与原理）。
 
 ## 语言
 
