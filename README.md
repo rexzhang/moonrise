@@ -21,7 +21,7 @@ MoonRise 是一款菜单栏应用：在 host 上创建 HiDPI 虚拟屏幕（默�
 
 ## 快速开始
 
-前提：host 为 macOS 14+（Apple Silicon / Intel），装有 Xcode 命令行工具；Moon 端另装 moonlight-qt。
+前提：host 为 macOS 14+（Apple Silicon / Intel），装有 Xcode 命令行工具；Moon 端另装 Moonlight 客户端（macOS 推荐 Moonlight macOS Enhanced，见 docs/install.md）。
 
 Clone 本仓库后，在 host 上执行：
 
@@ -41,7 +41,7 @@ open /Applications/MoonRise.app
 1. 获取 Sunshine：自动打开设置「Sunshine」页，点「获取」从 GitHub Releases 下载官方版本（自动验签），完成后屏幕功能解锁
 2. 授权：「权限」页允许「屏幕捕获」与「输入控制」两项（授权对象是 MoonRise）
 3. Retina 与排列：系统设置 → 显示器 选中 "Moon"，分辨率选 1280×800（"看起来像"），并把排列位置拖到主屏旁——分辨率与位置一起调整，macOS 会记住
-4. 连接：Moon 端 moonlight-qt 连接本机 → 输入 PIN 配对 → 分辨率 2560×1600 / 60fps / H.264 / 60 Mbps / 全屏，音量 0
+4. 连接：Moon 端 Moonlight 客户端连接本机 → 输入 PIN 配对 → 分辨率 2560×1600 / 60fps / H.264 / 60 Mbps / 全屏，音量 0
 
 ## 文档
 

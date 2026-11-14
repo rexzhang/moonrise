@@ -3,7 +3,7 @@
 ## 系统要求
 
 - host（本机 Mac）：macOS 14+（实测 macOS 27），Apple Silicon / Intel；需 Xcode 命令行工具（swift build）
-- Moon（客户端 Mac）：moonlight-qt 支持的 macOS 版本（最新版支持 macOS 11+）
+- Moon（客户端 Mac）：安装 Moonlight 客户端，macOS 推荐 Moonlight macOS Enhanced（原生客户端，见「Moon 端」），moonlight-qt 亦可用
 - 网络：同一局域网；2560×1600@60 H.264 约需 60 Mbps，5GHz Wi-Fi 起步，有线更佳
 - 如安装了 Duet Display：先禁用其虚拟屏（iPad 等其他用途不受影响）
 
@@ -56,11 +56,20 @@ Sunshine 是实际执行屏幕捕获与串流的组件。来源唯一：设置�
 
 ## Moon 端（客户端）
 
-1. 安装 moonlight-qt。
-2. 显示设置保持「默认为此显示器」（1280×800）。
-3. 连接 host（自动发现首屏；扩展屏手动添加，见「多扩展屏」）→ 首次连接输入 PIN 配对，见下文「配对」。
-4. 视频设置：分辨率 2560×1600、帧率 60、编码 H.264、码率 60 Mbps、全屏；音量 0。
-5. 全屏后屏幕文字应与原生同样锐利（同页 PDF 对比检验）。
+Moon 端是 Mac，客户端二选一：
+
+- Moonlight macOS Enhanced（macOS 推荐）：https://github.com/skyhua0224/moonlight-macos-enhanced
+  - macOS 原生客户端（AppKit/SwiftUI），Apple Silicon / Intel 双支持，兼容 MoonRise 托管的官方 Sunshine
+  - 支持自定义端口与每台主机独立连接方式，多块扩展屏逐一「手动添加 IP:端口」时更顺手
+  - 未做 Apple 公证：首次启动被 Gatekeeper 拦截时，右键 App 选「打开」，或在系统设置 → 隐私与安全性点「仍要打开」；仍不行执行 `xattr -dr com.apple.quarantine /Applications/Moonlight.app`
+- moonlight-qt（通用选项）：https://moonlight-stream.org，最新版支持 macOS 11+
+
+连接与显示步骤（两个客户端一致）：
+
+1. 显示设置保持「默认为此显示器」（1280×800）。
+2. 连接 host（自动发现首屏；扩展屏手动添加，见「多扩展屏」）→ 首次连接输入 PIN 配对，见下文「配对」。
+3. 视频参数对齐：分辨率 2560×1600、帧率 60、编码 H.264、码率 60 Mbps、全屏（各客户端设置项名称略有差异）；音量 0。
+4. 全屏后屏幕文字应与原生同样锐利（同页 PDF 对比检验）。
 
 ## 界面导览
 
